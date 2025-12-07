@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "babylonjs": "^8.40.1",
+    "earcut": "^3.0.2"
+  },
+  "devDependencies": {
+    "vite": "^7.2.6"
+  }
+}
