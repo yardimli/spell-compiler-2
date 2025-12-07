@@ -1,16 +1,36 @@
 import * as BABYLON from 'babylonjs';
 import * as Earcut from 'earcut';
+import HavokPhysics from '@babylonjs/havok';
 
 // 1. Safe Earcut Import
-// Vite/Webpack sometimes wraps CommonJS modules. We ensure we get the function.
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut; // Global backup
+
+// 2. Havok WASM URL
+// Webpack CopyPlugin moves the WASM file to the root of the dist folder.
+const havokWasmUrl = "./HavokPhysics.wasm";
 
 const canvas = document.getElementById('renderCanvas');
 const engine = new BABYLON.Engine(canvas, true);
 
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
+	
+	// --- Physics Initialization ---
+	try {
+		// Initialize Havok with the local WASM file
+		const havokInstance = await HavokPhysics({
+			locateFile: () => havokWasmUrl
+		});
+		
+		// Create the plugin
+		const hk = new BABYLON.HavokPlugin(true, havokInstance);
+		
+		// Enable physics with gravity (y: -9.81)
+		scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), hk);
+	} catch (e) {
+		console.error("Failed to initialize physics:", e);
+	}
 	
 	// --- Camera & Light ---
 	const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0), scene);
@@ -53,17 +73,23 @@ const createScene = async function () {
 	groundMat.diffuseTexture.vScale = 10;
 	ground.material = groundMat;
 	
+	// --- Physics: Ground Body ---
+	// Static body (mass: 0)
+	new BABYLON.PhysicsAggregate(
+		ground,
+		BABYLON.PhysicsShapeType.BOX,
+		{ mass: 0, restitution: 0.5 },
+		scene
+	);
+	
 	// --- 3D Text ---
-	// We use a different font URL that is more reliable
 	const fontURL = "./assets/fonts/Kenney%20Future%20Regular.json";
 	
 	try {
 		const fontResponse = await fetch(fontURL);
 		const fontData = await fontResponse.json();
 		
-		// Validate data before use
 		if (!fontData || !fontData.boundingBox) {
-			console.error("Invalid font data loaded:", fontData);
 			throw new Error("Font data is missing boundingBox");
 		}
 		
@@ -75,31 +101,40 @@ const createScene = async function () {
 				size: 2,
 				depth: 0.5,
 				resolution: 64,
-			}
-			, scene);
+			},
+			scene
+		);
 		
 		textMesh.position.y = 2;
 		textMesh.position.x = -6;
 		
-		// Silver Material
 		const silverMat = new BABYLON.PBRMaterial("silver", scene);
 		silverMat.metallic = 1.0;
 		silverMat.roughness = 0.15;
 		silverMat.albedoColor = new BABYLON.Color3(0.9, 0.9, 0.9);
 		textMesh.material = silverMat;
 		
-		// --- FIX START ---
-		// 1. Calculate Pivot ONCE (not in the loop).
-		// 2. Use 'center' (Local) instead of 'centerWorld'. setPivotPoint expects local space.
+		// --- Fix Pivot ---
 		textMesh.computeWorldMatrix(true);
 		const center = textMesh.getBoundingInfo().boundingBox.center;
 		textMesh.setPivotPoint(center);
-		// --- FIX END ---
+		
+		// --- Physics: Text Body ---
+		// We use CONVEX_HULL for the text shape.
+		// We set mass: 0 initially, but change MotionType to ANIMATED.
+		// ANIMATED bodies are kinematic: they don't fall, but they push other objects
+		// and follow the mesh's rotation/position.
+		const textAgg = new BABYLON.PhysicsAggregate(
+			textMesh,
+			BABYLON.PhysicsShapeType.CONVEX_HULL,
+			{ mass: 0, restitution: 0.9 },
+			scene
+		);
+		textAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 		
 		// Spin Animation
 		scene.registerBeforeRender(() => {
 			textMesh.rotation.y += 0.01;
-			// Removed setPivotPoint from here to prevent flickering
 		});
 		
 	} catch (e) {
@@ -112,6 +147,7 @@ const createScene = async function () {
 		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
 		sphere.position.x = (Math.random() * 20) - 10;
 		sphere.position.z = (Math.random() * 20) - 10;
+		sphere.position.y = 10 + Math.random() * 5; // Start high
 		
 		const ballMat = new BABYLON.StandardMaterial(`ballMat${i}`, scene);
 		ballMat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
@@ -119,10 +155,14 @@ const createScene = async function () {
 		ballMat.specularPower = 64;
 		sphere.material = ballMat;
 		
-		const offset = Math.random() * Math.PI;
-		sphere.onBeforeRenderObservable.add(() => {
-			sphere.position.y = 0.75 + Math.abs(Math.sin((performance.now() * 0.002) + offset)) * 3;
-		});
+		// --- Physics: Ball Body ---
+		// Dynamic body (mass: 1)
+		new BABYLON.PhysicsAggregate(
+			sphere,
+			BABYLON.PhysicsShapeType.SPHERE,
+			{ mass: 1, restitution: 0.8, friction: 0.5 },
+			scene
+		);
 	}
 	
 	return scene;
