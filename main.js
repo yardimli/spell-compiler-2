@@ -7,7 +7,6 @@ const earcut = Earcut.default || Earcut;
 window.earcut = earcut; // Global backup
 
 // 2. Havok WASM URL
-// Webpack CopyPlugin moves the WASM file to the root of the dist folder.
 const havokWasmUrl = "./HavokPhysics.wasm";
 
 const canvas = document.getElementById('renderCanvas');
@@ -18,63 +17,78 @@ const createScene = async function () {
 	
 	// --- Physics Initialization ---
 	try {
-		// Initialize Havok with the local WASM file
 		const havokInstance = await HavokPhysics({
 			locateFile: () => havokWasmUrl
 		});
-		
-		// Create the plugin
 		const hk = new BABYLON.HavokPlugin(true, havokInstance);
-		
-		// Enable physics with gravity (y: -9.81)
 		scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), hk);
 	} catch (e) {
 		console.error("Failed to initialize physics:", e);
 	}
 	
-	// --- Camera & Light ---
+	// --- Camera ---
 	const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0), scene);
 	camera.attachControl(canvas, true);
 	camera.wheelPrecision = 50;
 	
+	// --- Lights & Shadows ---
 	const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
-	hemiLight.intensity = 0.7;
+	hemiLight.intensity = 0.5;
 	
-	const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 10, 0), scene);
-	pointLight.intensity = 0.5;
+	const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 15, 0), scene);
+	pointLight.intensity = 0.8;
 	
-	// --- Environment (Reflections) ---
+	// 1. Create Shadow Generator
+	const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight);
+	shadowGenerator.useBlurExponentialShadowMap = true;
+	shadowGenerator.blurKernel = 32;
+	
+	// --- Environment ---
 	const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/environments/studio.env", scene);
 	scene.environmentTexture = envTexture;
 	scene.createDefaultSkybox(envTexture, true, 1000);
 	
 	// --- Grid Surface ---
-	const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
-	const gridTexture = new BABYLON.DynamicTexture("gridTexture", 512, scene, true);
+	// Create ground with 100 subdivisions as requested
+	const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50, subdivisions: 100 }, scene);
+	ground.receiveShadows = true;
+	
+	// --- Texture Generation with Loops ---
+	// We use a 2000x2000 texture to fit 100x100 tiles (20px each) perfectly.
+	const textureSize = 2000;
+	const tilesCount = 20;
+	const tileSize = textureSize / tilesCount; // 20px
+	
+	const gridTexture = new BABYLON.DynamicTexture("gridTexture", { width: textureSize, height: textureSize }, scene, false);
 	const ctx = gridTexture.getContext();
-	ctx.fillStyle = "#000000";
-	ctx.fillRect(0, 0, 512, 512);
-	ctx.strokeStyle = "#444444";
-	ctx.lineWidth = 2;
-	ctx.beginPath();
-	for (let i = 0; i <= 512; i += 64) {
-		ctx.moveTo(i, 0);
-		ctx.lineTo(i, 512);
-		ctx.moveTo(0, i);
-		ctx.lineTo(512, i);
+	
+	// Loop to fill the ground with 100x100 tiles
+	for (let x = 0; x < tilesCount; x++) {
+		for (let y = 0; y < tilesCount; y++) {
+			// Checkerboard logic: if sum of indices is even, use White, else Red
+			if ((x + y) % 2 === 0) {
+				ctx.fillStyle = "#FFFFFF"; // White
+			} else {
+				ctx.fillStyle = "#FF0000"; // Red
+			}
+			// Draw the tile
+			ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+		}
 	}
-	ctx.stroke();
 	gridTexture.update();
 	
 	const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
 	groundMat.diffuseTexture = gridTexture;
-	groundMat.specularColor = new BABYLON.Color3(0, 0, 0);
-	groundMat.diffuseTexture.uScale = 10;
-	groundMat.diffuseTexture.vScale = 10;
+	
+	// Modified: Changed specularColor to white (1, 1, 1) or gray to enable shininess on the tiles
+	groundMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+	
+	// Added: Set specularPower to control the sharpness of the highlight (higher = glossier/sharper)
+	groundMat.specularPower = 264;
+	
 	ground.material = groundMat;
 	
-	// --- Physics: Ground Body ---
-	// Static body (mass: 0)
+	// --- Physics: Ground ---
 	new BABYLON.PhysicsAggregate(
 		ground,
 		BABYLON.PhysicsShapeType.BOX,
@@ -100,13 +114,10 @@ const createScene = async function () {
 			{
 				size: 2,
 				depth: 0.5,
-				resolution: 64,
+				resolution: 64
 			},
 			scene
 		);
-		
-		textMesh.position.y = 2;
-		textMesh.position.x = -6;
 		
 		const silverMat = new BABYLON.PBRMaterial("silver", scene);
 		silverMat.metallic = 1.0;
@@ -114,29 +125,32 @@ const createScene = async function () {
 		silverMat.albedoColor = new BABYLON.Color3(0.9, 0.9, 0.9);
 		textMesh.material = silverMat;
 		
-		// --- Fix Pivot ---
+		shadowGenerator.addShadowCaster(textMesh);
+		
 		textMesh.computeWorldMatrix(true);
 		const center = textMesh.getBoundingInfo().boundingBox.center;
-		textMesh.setPivotPoint(center);
+		textMesh.position.x -= center.x;
+		textMesh.position.y -= center.y;
+		textMesh.position.z -= center.z;
+		textMesh.bakeCurrentTransformIntoVertices();
 		
-		// --- Physics: Text Body ---
-		// We use CONVEX_HULL for the text shape.
-		// We set mass: 0 initially, but change MotionType to ANIMATED.
-		// ANIMATED bodies are kinematic: they don't fall, but they push other objects
-		// and follow the mesh's rotation/position.
+		textMesh.position.y = 2;
+		textMesh.position.x = -6;
+		
 		const textAgg = new BABYLON.PhysicsAggregate(
 			textMesh,
 			BABYLON.PhysicsShapeType.CONVEX_HULL,
 			{ mass: 0, restitution: 0.9 },
 			scene
 		);
+		
 		textAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
+		textAgg.body.disablePreStep = false;
 		
-		// Spin Animation
 		scene.registerBeforeRender(() => {
-			textMesh.rotation.y += 0.01;
+			textMesh.rotate(BABYLON.Axis.Y, 0.01, BABYLON.Space.LOCAL);
+			textAgg.body.setTargetTransform(textMesh.absolutePosition, textMesh.rotationQuaternion);
 		});
-		
 	} catch (e) {
 		console.error("Failed to create 3D text:", e);
 	}
@@ -147,7 +161,7 @@ const createScene = async function () {
 		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
 		sphere.position.x = (Math.random() * 20) - 10;
 		sphere.position.z = (Math.random() * 20) - 10;
-		sphere.position.y = 10 + Math.random() * 5; // Start high
+		sphere.position.y = 10 + Math.random() * 5;
 		
 		const ballMat = new BABYLON.StandardMaterial(`ballMat${i}`, scene);
 		ballMat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
@@ -155,8 +169,8 @@ const createScene = async function () {
 		ballMat.specularPower = 64;
 		sphere.material = ballMat;
 		
-		// --- Physics: Ball Body ---
-		// Dynamic body (mass: 1)
+		shadowGenerator.addShadowCaster(sphere);
+		
 		new BABYLON.PhysicsAggregate(
 			sphere,
 			BABYLON.PhysicsShapeType.SPHERE,
