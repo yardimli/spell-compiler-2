@@ -79,9 +79,9 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		currentIndex: 0,
 		startTime: 0,
 		startPos: new BABYLON.Vector3(), // Position at start of current segment
-		startRot: 0,                     // Rotation at start of current segment
+		startRot: 0, // Rotation at start of current segment
 		segmentDuration: 0,
-		isFiring: false,                 // Flag if we are in the "wait for fire" pause
+		isFiring: false, // Flag if we are in the "wait for fire" pause
 		fireCallback: null,
 		onComplete: null,
 		onProgress: null // Update UI
@@ -126,6 +126,11 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			
 			if (t >= 1.0) {
 				animationState = 'REPLAY';
+				// --- FIX START: Reset Opacity ---
+				// Player has returned to start. Reset alpha to 1.0 so they look solid during replay.
+				playerMat.alpha = 1.0;
+				// --- FIX END ---
+				
 				if (rewindState.onComplete) rewindState.onComplete();
 				
 				// Init Replay
@@ -284,8 +289,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			if (t >= 1.0) {
 				setupReplaySegment(replayState.currentIndex + 1);
 			}
-		}
-		else if (nextWp.type === 'FIRE') {
+		} else if (nextWp.type === 'FIRE') {
 			// Rotate towards the shot direction
 			const smoothT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 			

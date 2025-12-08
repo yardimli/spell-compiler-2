@@ -92,10 +92,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	return {
 		setBallsFrozen: (isFrozen) => {
 			// 1. Cleanup: Remove any aggregates whose meshes have been disposed (destroyed)
-			// We iterate backwards to safely splice the array
 			for (let i = ballAggregates.length - 1; i >= 0; i--) {
 				const agg = ballAggregates[i];
-				// Check if aggregate is invalid, body is missing, or its mesh (transformNode) is disposed
 				if (!agg || !agg.body || !agg.transformNode || agg.transformNode.isDisposed()) {
 					ballAggregates.splice(i, 1);
 				}
@@ -110,6 +108,14 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 					} else {
 						// Unlock them
 						agg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
+						
+						// --- FIX: Force wake up using correct API ---
+						if (agg.body.setActivationState) {
+							agg.body.setActivationState(BABYLON.PhysicsActivationState.ACTIVE);
+						} else {
+							// Fallback: Apply a tiny negligible impulse to force the physics engine to wake the body
+							agg.body.applyImpulse(new BABYLON.Vector3(0, -0.001, 0), agg.transformNode.absolutePosition);
+						}
 					}
 				}
 			});
