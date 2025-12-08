@@ -10,6 +10,12 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const powerContainer = document.getElementById('power-container');
 	const powerBar = document.getElementById('power-bar');
 	
+	// --- NEW: Target Selection Variables ---
+	let currentTarget = null;
+	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
+	// Color for the glow effect (Greenish-Blue)
+	const targetColor = new BABYLON.Color3(0, 1, 1);
+	
 	// --- NEW: Explosion Logic ---
 	const createExplosion = (position) => {
 		// 1. Visual Fragments (Debris)
@@ -39,7 +45,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			
 			// Send fragments flying in random directions
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
-			const force =  5+  Math.random() * 5;
+			const force = 5 + Math.random() * 5;
 			fragAgg.body.applyImpulse(dir.scale(force), frag.absolutePosition);
 			
 			// Cleanup fragments after 1.5 seconds
@@ -69,7 +75,61 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		});
 	};
 	
-	// Input handling for charging/firing
+	// --- NEW: Target Management Functions ---
+	
+	// Helper to find all valid targets currently in the camera's view
+	const getVisibleTargets = () => {
+		const camera = cameraManager.getActiveCamera();
+		// Filter meshes: Must start with 'sphere' (from game-scene-alt), be enabled, and inside frustum
+		return scene.meshes.filter(m => {
+			return m.name.startsWith('sphere') &&
+				m.isEnabled() &&
+				!m.isDisposed() &&
+				camera.isInFrustum(m);
+		});
+	};
+	
+	const cycleTarget = () => {
+		const visibleTargets = getVisibleTargets();
+		
+		if (visibleTargets.length === 0) {
+			// No targets available
+			setTarget(null);
+			return;
+		}
+		
+		// Sort targets to ensure consistent cycling order (e.g., by name or distance)
+		// Here we sort by name for stability
+		visibleTargets.sort((a, b) => a.name.localeCompare(b.name));
+		
+		let nextIndex = 0;
+		
+		if (currentTarget) {
+			const currentIndex = visibleTargets.indexOf(currentTarget);
+			if (currentIndex !== -1) {
+				// Pick the next one, wrapping around
+				nextIndex = (currentIndex + 1) % visibleTargets.length;
+			}
+		}
+		
+		setTarget(visibleTargets[nextIndex]);
+	};
+	
+	const setTarget = (mesh) => {
+		// Clear previous highlight
+		if (currentTarget) {
+			highlightLayer.removeMesh(currentTarget);
+		}
+		
+		currentTarget = mesh;
+		
+		// Add new highlight
+		if (currentTarget) {
+			highlightLayer.addMesh(currentTarget, targetColor);
+		}
+	};
+	
+	// Input handling for charging/firing/targeting
 	const inputMap = {};
 	scene.onKeyboardObservable.add((kbInfo) => {
 		const type = kbInfo.type;
@@ -80,8 +140,12 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		} else if (type === BABYLON.KeyboardEventTypes.KEYUP) {
 			inputMap[key] = false;
 			
-			if (key === 'z') {
+			if (key === 'c') {
 				fireBall();
+			}
+			// --- NEW: Cycle Target on 'x' ---
+			if (key === 'x') {
+				cycleTarget();
 			}
 		}
 	});
@@ -115,11 +179,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			scene
 		);
 		
-		// Apply Force
+		// Apply Force (Initial Launch)
 		ballAgg.body.applyImpulse(aimDir.scale(throwPower), ball.absolutePosition);
 		
 		// Track
-		const ballData = { mesh: ball, agg: ballAgg, age: 0, isDead: false };
+		// --- CHANGED: Store target in ball data ---
+		const ballData = {
+			mesh: ball,
+			agg: ballAgg,
+			age: 0,
+			isDead: false,
+			target: currentTarget // Attach current target (can be null)
+		};
 		thrownBalls.push(ballData);
 		
 		// --- Collision Logic ---
@@ -135,16 +206,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const name = hitMesh.name;
 			
 			// Requirement: Bounce on ground, Explode on Wall or Ball
-			// We check if the hit object is a target we want to explode on.
-			// Walls are named 'wall_x', balls are 'spherex' or 'thrownBall'.
 			const isTarget = name.includes('wall') || name.includes('sphere') || name.includes('thrownBall');
 			
 			if (isTarget) {
 				createExplosion(ball.absolutePosition);
 				ballData.isDead = true;
 				ballAgg.body.getCollisionObservable().remove(collisionObserver);
+				
+				// If we hit the target we were aiming at, clear the global target selection
+				if (ballData.target && hitMesh === ballData.target) {
+					setTarget(null);
+				}
 			}
-			// If not target (e.g. 'ground'), do nothing -> Physics handles bounce.
 		});
 		
 		// Reset UI
@@ -157,7 +230,16 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		
-		// 1. Lifecycle Management
+		// --- NEW: Check Target Visibility ---
+		if (currentTarget) {
+			const camera = cameraManager.getActiveCamera();
+			// If target is disposed or out of view, deselect it
+			if (currentTarget.isDisposed() || !currentTarget.isEnabled() || !camera.isInFrustum(currentTarget)) {
+				setTarget(null);
+			}
+		}
+		
+		// 1. Lifecycle Management & Homing Logic
 		for (let i = thrownBalls.length - 1; i >= 0; i--) {
 			const b = thrownBalls[i];
 			b.age += dt;
@@ -167,6 +249,19 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				b.mesh.dispose();
 				thrownBalls.splice(i, 1);
 				continue;
+			}
+			
+			// --- NEW: Homing Logic ---
+			if (b.target && !b.target.isDisposed()) {
+				// Calculate direction to target
+				const targetPos = b.target.absolutePosition;
+				const ballPos = b.mesh.absolutePosition;
+				const direction = targetPos.subtract(ballPos).normalize();
+				
+				// Apply homing force (steering)
+				// We apply a continuous force to steer the ball towards the target
+				const homingForce = 15.0 * dt; // Adjust strength as needed
+				b.agg.body.applyImpulse(direction.scale(homingForce), ballPos);
 			}
 			
 			// Increased lifetime to allow for bounces
@@ -182,7 +277,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		}
 		
 		// 2. Charging Logic
-		if (inputMap['z']) {
+		if (inputMap['c']) {
 			if (currentCharge < maxCharge) {
 				currentCharge += chargeRate;
 				if (currentCharge > maxCharge) currentCharge = maxCharge;
