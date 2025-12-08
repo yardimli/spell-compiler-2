@@ -1,8 +1,17 @@
 #TODO
 
-- add player character ..................................................................DONE
-- player should interact with balls and floor and walls. ................................DONE
-- add player movement controls (WASD or arrow keys) and space for jump ..................DONE
+- free camera mouse wheel not working to zoom in/out
+- free camera should pan with right mouse button drag
+- add a cap to the player to know which direction they are facing
+- only rotate the character based on camera in follow and 1st person camera modes
+- when clicking on the camera mode buttons, set focus back to the canvas so that keyboard input works
+
+
+#DONE
+
+- add player character
+- player should interact with balls and floor and walls
+- add player movement controls (WASD or arrow keys) and space for jump
 - allow player to throw balls with space key, longer press = farther throw, show power meter
 - make balls become smaller over time and then disappear
 - add 1st person/3rd person camera toggle add button on top right of ui
