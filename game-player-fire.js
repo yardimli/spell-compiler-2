@@ -160,9 +160,17 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const spawnPos = playerVisual.absolutePosition.clone();
 		spawnPos.y += 1.5;
 		
-		// Get aim direction
-		const aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
-		aimDir.normalize();
+		// --- CHANGED: Aiming Logic ---
+		// If we have a target, calculate vector directly to its center
+		let aimDir;
+		if (currentTarget && !currentTarget.isDisposed()) {
+			// Vector from spawn to target center
+			aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
+		} else {
+			// Default: Player forward direction
+			aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
+			aimDir.normalize();
+		}
 		
 		bullet.position = spawnPos.add(aimDir.scale(1.5));
 		
@@ -175,6 +183,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			{ mass: 0.5, restitution: 0.8 },
 			scene
 		);
+		
+		// --- NEW: Disable Gravity for this bullet ---
+		// This ensures it travels in a straight line
+		bulletAgg.body.setGravityFactor(0);
 		
 		// Apply Force
 		bulletAgg.body.applyImpulse(aimDir.scale(throwPower), bullet.absolutePosition);
@@ -269,15 +281,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				continue;
 			}
 			
-			// Homing Logic
-			if (b.target && !b.target.isDisposed()) {
-				const targetPos = b.target.absolutePosition;
-				const bulletPos = b.mesh.absolutePosition;
-				const direction = targetPos.subtract(bulletPos).normalize();
-				
-				const homingForce = 15.0 * dt;
-				b.agg.body.applyImpulse(direction.scale(homingForce), bulletPos);
-			}
+			// --- REMOVED: Homing Logic ---
+			// We removed the continuous force application here.
+			// The bullet now travels in a straight line based on the initial impulse
+			// and the fact that gravity is disabled (setGravityFactor(0)).
 			
 			// Lifetime check
 			if (b.age > 5.0) {
