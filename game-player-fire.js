@@ -20,19 +20,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	let isTurnActive = true;
 	
-	// --- Explosion Logic (Same as before) ---
+	// --- Explosion Logic ---
 	const createExplosion = (position, color = null) => {
-		// ... (Keep existing explosion logic) ...
 		const fragmentCount = 8;
 		for (let i = 0; i < fragmentCount; i++) {
 			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', { type: 1, size: 0.3 }, scene);
 			frag.position = position.clone();
-			frag.position.addInPlace(new BABYLON.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5));
+			frag.position.addInPlace(new BABYLON.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5));
 			const fragMat = new BABYLON.StandardMaterial('fragMat', scene);
 			fragMat.diffuseColor = color || new BABYLON.Color3(1, 0.5 + Math.random() * 0.5, 0);
 			frag.material = fragMat;
 			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, { mass: 0.2, restitution: 0.5 }, scene);
-			const dir = new BABYLON.Vector3(Math.random()-0.5, Math.random(), Math.random()-0.5).normalize();
+			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
 			fragAgg.body.applyImpulse(dir.scale(5 + Math.random() * 5), frag.absolutePosition);
 			setTimeout(() => { frag.dispose(); fragAgg.dispose(); }, 1500);
 		}
@@ -99,16 +98,15 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		if (currentTarget && !currentTarget.isDisposed()) {
 			const dir = currentTarget.absolutePosition.subtract(playerVisual.absolutePosition);
 			aimRotation = Math.atan2(dir.x, dir.z);
-		} else {
-			// If no target, use camera or player forward?
-			// Let's use player visual forward
-			aimRotation = playerVisual.rotation.y;
 		}
+		
+		// Snap player visual to face target immediately
+		playerVisual.rotation.y = aimRotation;
 		
 		// Add Waypoint
 		playerManager.addWaypoint('FIRE', {
 			power: power,
-			target: currentTarget, // Store reference (might be disposed later, handle with care)
+			target: currentTarget, // Store reference
 			rotation: aimRotation
 		});
 		
@@ -138,14 +136,22 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const spawnHeight = position.clone();
 		spawnHeight.y += 1.5;
 		
-		const rotationMatrix = BABYLON.Matrix.RotationY(rotationY);
-		const aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+		// --- Calculate 3D Aim Direction ---
+		let aimDir;
+		if (target && !target.isDisposed()) {
+			// Aim at the target's current position in 3D space
+			aimDir = target.absolutePosition.subtract(spawnHeight).normalize();
+		} else {
+			// Fallback: Horizontal direction based on rotation
+			const rotationMatrix = BABYLON.Matrix.RotationY(rotationY);
+			aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+		}
 		
 		bullet.position = spawnHeight.add(aimDir.scale(1.5));
 		shadowGenerator.addShadowCaster(bullet);
 		
 		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
-		bulletAgg.body.setGravityFactor(0);
+		bulletAgg.body.setGravityFactor(0); // Bullets fly straight
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
 		
 		const bulletData = { mesh: bullet, agg: bulletAgg, age: 0, isDead: false, isReal: isReal };
