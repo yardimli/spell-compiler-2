@@ -27,7 +27,7 @@ const createScene = async function () {
 	}
 	
 	// --- Camera ---
-	const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0), scene);
+	const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 60, new BABYLON.Vector3(0, 0, 0), scene);
 	camera.attachControl(canvas, true);
 	camera.wheelPrecision = 50;
 	
@@ -38,7 +38,6 @@ const createScene = async function () {
 	const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 15, 0), scene);
 	pointLight.intensity = 0.8;
 	
-	// 1. Create Shadow Generator
 	const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight);
 	shadowGenerator.useBlurExponentialShadowMap = true;
 	shadowGenerator.blurKernel = 32;
@@ -48,44 +47,50 @@ const createScene = async function () {
 	scene.environmentTexture = envTexture;
 	scene.createDefaultSkybox(envTexture, true, 1000);
 	
-	// --- Grid Surface ---
-	// Create ground with 100 subdivisions as requested
-	const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50, subdivisions: 100 }, scene);
+	// --- Constants ---
+	const groundSize = 50;
+	const wallHeight = 4;
+	const wallThickness = 2;
+	
+	// --- Texture Generation Functions ---
+	
+	/**
+	 * Creates the floor texture using an image and scales it based on tile size.
+	 * @param {BABYLON.Scene} scene
+	 * @param {number} tileSize - The size of one tile in world units.
+	 * @returns {BABYLON.Texture}
+	 */
+	const createFloorTexture = (scene, tileSize) => {
+		const texture = new BABYLON.Texture("./assets/game/floor.jpg", scene);
+		// Calculate UV scale: Mesh Size / Tile Size
+		texture.uScale = groundSize / tileSize;
+		texture.vScale = groundSize / tileSize;
+		return texture;
+	};
+	
+	/**
+	 * Creates the wall texture using an image.
+	 * Note: We do NOT scale the texture here anymore. We scale UVs on the mesh (faceUV).
+	 * @param {BABYLON.Scene} scene
+	 * @returns {BABYLON.Texture}
+	 */
+	const createWallTexture = (scene) => {
+		const texture = new BABYLON.Texture("./assets/game/walls.jpg", scene);
+		return texture;
+	};
+	
+	// --- Grid Surface (Floor) ---
+	const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: groundSize, height: groundSize, subdivisions: 100 }, scene);
 	ground.receiveShadows = true;
 	
-	// --- Texture Generation with Loops ---
-	// We use a 2000x2000 texture to fit 100x100 tiles (20px each) perfectly.
-	const textureSize = 2000;
-	const tilesCount = 20;
-	const tileSize = textureSize / tilesCount; // 20px
-	
-	const gridTexture = new BABYLON.DynamicTexture("gridTexture", { width: textureSize, height: textureSize }, scene, false);
-	const ctx = gridTexture.getContext();
-	
-	// Loop to fill the ground with 100x100 tiles
-	for (let x = 0; x < tilesCount; x++) {
-		for (let y = 0; y < tilesCount; y++) {
-			// Checkerboard logic: if sum of indices is even, use White, else Red
-			if ((x + y) % 2 === 0) {
-				ctx.fillStyle = "#FFFFFF"; // White
-			} else {
-				ctx.fillStyle = "#FF0000"; // Red
-			}
-			// Draw the tile
-			ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-		}
-	}
-	gridTexture.update();
+	// Create Floor Material
+	const floorTileSize = 5; // Variable to decide the size of each floor tile
+	const floorTexture = createFloorTexture(scene, floorTileSize);
 	
 	const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
-	groundMat.diffuseTexture = gridTexture;
-	
-	// Modified: Changed specularColor to white (1, 1, 1) or gray to enable shininess on the tiles
+	groundMat.diffuseTexture = floorTexture;
 	groundMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
-	
-	// Added: Set specularPower to control the sharpness of the highlight (higher = glossier/sharper)
 	groundMat.specularPower = 264;
-	
 	ground.material = groundMat;
 	
 	// --- Physics: Ground ---
@@ -95,6 +100,72 @@ const createScene = async function () {
 		{ mass: 0, restitution: 0.5 },
 		scene
 	);
+	
+	// --- Walls ---
+	// Create Wall Material
+	const wallTileSize = 10; // Variable to decide the size of each wall tile
+	const wallTexture = createWallTexture(scene); // Texture is 1x1 scale
+	
+	const wallMat = new BABYLON.StandardMaterial("wallMat", scene);
+	wallMat.diffuseTexture = wallTexture;
+	wallMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
+	wallMat.specularPower = 264;
+	
+	// Calculate faceUVs to ensure texture tiles correctly on all sides (Front, Top, Side)
+	// We map the UVs so that 1 UV unit = 'wallTileSize' world units.
+	const faceUV = [];
+	// Indices: 0:Front, 1:Back, 2:Right, 3:Left, 4:Top, 5:Bottom
+	
+	// Front & Back (Size: groundSize x wallHeight)
+	faceUV[0] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
+	faceUV[1] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
+	
+	// Right & Left (Size: wallThickness x wallHeight)
+	faceUV[2] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
+	faceUV[3] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
+	
+	// Top & Bottom (Size: groundSize x wallThickness)
+	// Fix: Swapped U and V scaling because the default UV mapping for Top/Bottom faces
+	// aligns V with the X-axis (Width) and U with the Z-axis (Depth) in this context,
+	// causing the texture to stretch if not inverted.
+	faceUV[4] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
+	faceUV[5] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
+	
+	const wallOffset = groundSize / 2;
+	
+	// Configuration for the 4 walls.
+	const wallsConfig = [
+		{ x: 0, z: wallOffset, rotation: 0 },             // Top (North)
+		{ x: 0, z: -wallOffset, rotation: Math.PI },      // Bottom (South)
+		{ x: wallOffset, z: 0, rotation: -Math.PI / 2 },  // Right (East)
+		{ x: -wallOffset, z: 0, rotation: Math.PI / 2 }   // Left (West)
+	];
+	
+	wallsConfig.forEach((config, index) => {
+		const wall = BABYLON.MeshBuilder.CreateBox(`wall_${index}`, {
+			width: groundSize,
+			height: wallHeight,
+			depth: wallThickness,
+			faceUV: faceUV // Apply the calculated UVs
+		}, scene);
+		
+		// Position and Rotate
+		wall.position.set(config.x, wallHeight / 2, config.z);
+		wall.rotation.y = config.rotation;
+		
+		// Apply material
+		wall.material = wallMat;
+		wall.receiveShadows = true;
+		shadowGenerator.addShadowCaster(wall);
+		
+		// Physics
+		new BABYLON.PhysicsAggregate(
+			wall,
+			BABYLON.PhysicsShapeType.BOX,
+			{ mass: 0, restitution: 0.5 },
+			scene
+		);
+	});
 	
 	// --- 3D Text ---
 	const fontURL = "./assets/fonts/Kenney%20Future%20Regular.json";
@@ -159,8 +230,8 @@ const createScene = async function () {
 	const ballCount = 10;
 	for (let i = 0; i < ballCount; i++) {
 		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
-		sphere.position.x = (Math.random() * 20) - 10;
-		sphere.position.z = (Math.random() * 20) - 10;
+		sphere.position.x = (Math.random() * 40) - 20;
+		sphere.position.z = (Math.random() * 40) - 20;
 		sphere.position.y = 10 + Math.random() * 5;
 		
 		const ballMat = new BABYLON.StandardMaterial(`ballMat${i}`, scene);
@@ -174,7 +245,7 @@ const createScene = async function () {
 		new BABYLON.PhysicsAggregate(
 			sphere,
 			BABYLON.PhysicsShapeType.SPHERE,
-			{ mass: 1, restitution: 0.8, friction: 0.5 },
+			{ mass: 1, restitution: 0.9, friction: 0.01 },
 			scene
 		);
 	}

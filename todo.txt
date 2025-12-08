@@ -1,0 +1,7 @@
+#TODO
+
+- add player character
+- add player movement controls
+- add 1st person/3rd person camera toggle
+- allow player to throw balls with space key, longer press = farther throw, show power meter
+- make balls become smaller over time and then disappear
