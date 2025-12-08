@@ -18,6 +18,16 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	playerVisual.material = playerMat;
 	shadowGenerator.addShadowCaster(playerVisual);
 	
+	// --- Added: Player Cap (Direction Indicator) ---
+	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
+	cap.parent = playerVisual;
+	// Position slightly forward (Z) and up (Y) relative to player center
+	cap.position.set(0, 1.5, 0.6);
+	const capMat = new BABYLON.StandardMaterial('capMat', scene);
+	capMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.3); // Dark Blue
+	cap.material = capMat;
+	shadowGenerator.addShadowCaster(cap);
+	
 	// 3. Physics Aggregate on Root
 	const playerAgg = new BABYLON.PhysicsAggregate(
 		playerRoot,
@@ -50,8 +60,18 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body) return;
 		
-		// Get active camera for relative movement
+		// Get active camera
 		const camera = cameraManager.getActiveCamera();
+		const isFreeCam = (camera.name === 'freeCam');
+		const isFirstPerson = (camera.name === 'firstPersonCam');
+		
+		// --- Visibility Logic ---
+		// Hide cap in First Person view to prevent blocking the camera
+		if (isFirstPerson) {
+			if (cap.isEnabled()) cap.setEnabled(false);
+		} else {
+			if (!cap.isEnabled()) cap.setEnabled(true);
+		}
 		
 		// Calculate Input Direction
 		let z = (inputMap['w']) ? 1 : 0;
@@ -62,16 +82,24 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		
 		const isJumping = inputMap[' '];
 		
-		// Movement Logic relative to camera
-		const camForward = camera.getDirection(BABYLON.Vector3.Forward());
-		camForward.y = 0;
-		camForward.normalize();
+		let moveDir = new BABYLON.Vector3(0, 0, 0);
 		
-		const camRight = camera.getDirection(BABYLON.Vector3.Right());
-		camRight.y = 0;
-		camRight.normalize();
-		
-		const moveDir = camForward.scale(z).add(camRight.scale(x));
+		if (isFreeCam) {
+			// In Free Cam, movement is World Relative (W = North/Z+, D = East/X+)
+			// We do NOT use camera direction
+			moveDir = new BABYLON.Vector3(x, 0, z);
+		} else {
+			// In Follow/First Person, movement is Camera Relative
+			const camForward = camera.getDirection(BABYLON.Vector3.Forward());
+			camForward.y = 0;
+			camForward.normalize();
+			
+			const camRight = camera.getDirection(BABYLON.Vector3.Right());
+			camRight.y = 0;
+			camRight.normalize();
+			
+			moveDir = camForward.scale(z).add(camRight.scale(x));
+		}
 		
 		if (moveDir.length() > 0) {
 			moveDir.normalize();
@@ -97,6 +125,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 		
 		// Visual Rotation
+		// We rotate the visual mesh to face the movement direction
 		if (moveDir.lengthSquared() > 0.01) {
 			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
 			const currentRotation = playerVisual.rotation.y;

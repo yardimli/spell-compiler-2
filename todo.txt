@@ -5,7 +5,12 @@
 - add a cap to the player to know which direction they are facing
 - only rotate the character based on camera in follow and 1st person camera modes
 - when clicking on the camera mode buttons, set focus back to the canvas so that keyboard input works
+- balls are firing always away from the camera, they should fire in the direction the player is facing
+- the cap is blocking the 1st persons view, in 1st person view dont render the cap
 
+- add keys to allow user to strafe left/right without changing direction faced
+- make right click on mouse drag the camera around instead of panning,
+  left click should pan the camera in all modes except free camera
 
 #DONE
 

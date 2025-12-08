@@ -39,9 +39,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const spawnPos = playerVisual.absolutePosition.clone();
 		spawnPos.y += 1.5; // Eye level
 		
-		// Get aim direction from active camera
-		const camera = cameraManager.getActiveCamera();
-		const aimDir = camera.getDirection(BABYLON.Vector3.Forward());
+		// --- CHANGED: Get aim direction from player visual instead of camera ---
+		// The player wants to shoot where the avatar is facing.
+		const aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
+		aimDir.normalize();
 		
 		// Offset spawn
 		ball.position = spawnPos.add(aimDir.scale(1.5));
