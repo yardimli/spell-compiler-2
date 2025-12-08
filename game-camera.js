@@ -15,9 +15,13 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	// --- CHANGED: Swap Mouse Controls for Follow Camera ---
 	// Goal: Left Click (0) = Pan, Right Click (2) = Rotate
 	followCam.panningMouseButton = 0; // Set Pan to Left Click
+	
 	// Reassign button mapping: [Primary(Rotate), Secondary(Pan), Tertiary(Zoom)]
 	// We map Primary to Right(2) and Secondary to Left(0)
-	followCam.inputs.attached.pointers.buttons = [2, 0];
+	// Ensure pointers input is attached before modifying
+	if (followCam.inputs.attached.pointers) {
+		followCam.inputs.attached.pointers.buttons = [2, 0];
+	}
 	
 	// 2. First Person Camera
 	const firstPersonCam = new BABYLON.UniversalCamera('firstPersonCam', new BABYLON.Vector3(0, 0, 0), scene);
@@ -29,6 +33,11 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 20, -30), scene);
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
+	
+	// --- NEW: Remove default mouse input ---
+	// This prevents the default behavior (Left Click Rotate) from conflicting with our custom controls.
+	// We want Right Click to Rotate and Left Click to Pan, handled manually below.
+	freeCam.inputs.removeByType('FreeCameraMouseInput');
 	
 	// Default active
 	scene.activeCamera = followCam;
@@ -93,7 +102,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 					isLeftMouseDown = false;
 				}
 				break;
-			case BABYLON.PointerEventTypes.POINTERMOVE:
+			case BABYLON.PointerEventTypes.POINTERMOVE: {
 				const x = pointerInfo.event.clientX;
 				const y = pointerInfo.event.clientY;
 				const diffX = x - lastPointerX;
@@ -103,6 +112,8 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 				lastPointerY = y;
 				
 				// --- CHANGED: Right Click = Rotate (Look), Left Click = Pan ---
+				// Swapped logic to match the comment and intended behavior.
+				// Previously, Right Click was triggering Pan, which felt like "dragging very little".
 				if (isRightMouseDown) {
 					// Rotate Camera (Look around)
 					const sensitivity = 0.002;
@@ -121,6 +132,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 					freeCam.position.addInPlace(moveX).addInPlace(moveY);
 				}
 				break;
+			}
 		}
 	});
 	
