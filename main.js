@@ -8,18 +8,16 @@ import { initGameSceneAlt } from './game-scene-alt';
 import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
+import { initGameTimeline } from './game-timeline'; // NEW
 
-// 1. Safe Earcut Import
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
-
-// 2. Havok WASM URL
 const havokWasmUrl = './HavokPhysics.wasm';
 
 const canvas = document.getElementById('renderCanvas');
 const engine = new BABYLON.Engine(canvas, true);
 
-// --- UI Elements ---
+// UI Elements
 const timerSpinner = document.getElementById('timer-spinner');
 const timerText = document.getElementById('timer-text');
 const btnEndTurn = document.getElementById('btn-end-turn');
@@ -27,36 +25,34 @@ const btnEndTurn = document.getElementById('btn-end-turn');
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
 	
-	// --- Physics Initialization ---
+	// Physics
 	try {
-		const havokInstance = await HavokPhysics({
-			locateFile: () => havokWasmUrl
-		});
+		const havokInstance = await HavokPhysics({ locateFile: () => havokWasmUrl });
 		const hk = new BABYLON.HavokPlugin(true, havokInstance);
 		scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), hk);
 	} catch (e) {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// --- 1. Initialize Scene ---
+	// 1. Scene
 	const { shadowGenerator } = initGameScene(scene);
-	
-	// --- 2. Initialize Alt Scene (Balls) ---
 	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator);
 	
-	// --- 3. Initialize Player & Camera ---
+	// 2. Player & Camera
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
-	
 	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef);
 	const { playerRoot, playerVisual } = playerManager;
 	
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	
-	// --- 4. Initialize Fire System ---
-	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
+	// 3. Fire System (Pass playerManager to add waypoints)
+	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, playerManager);
 	
-	// --- 5. Turn System Logic ---
+	// 4. Timeline UI (NEW)
+	const timelineManager = initGameTimeline(playerManager);
+	
+	// 5. Turn Logic
 	const TURN_DURATION = 30;
 	let timeLeft = TURN_DURATION;
 	let timerInterval = null;
@@ -66,10 +62,7 @@ const createScene = async function () {
 		timerText.innerText = timeLeft;
 		const percentage = (timeLeft / TURN_DURATION) * 100;
 		timerSpinner.style.background = `conic-gradient(#00ff00 ${percentage}%, #333 0%)`;
-		
-		if (timeLeft <= 5) {
-			timerSpinner.style.background = `conic-gradient(#ff0000 ${percentage}%, #333 0%)`;
-		}
+		if (timeLeft <= 5) timerSpinner.style.background = `conic-gradient(#ff0000 ${percentage}%, #333 0%)`;
 	};
 	
 	const startTurn = () => {
@@ -78,24 +71,15 @@ const createScene = async function () {
 		updateTimerUI();
 		btnEndTurn.disabled = false;
 		
-		// 1. Freeze Balls
 		sceneAltManager.setBallsFrozen(true);
-		
-		// 2. Enable Player Input & Set Start Pos
 		playerManager.startTurn();
-		
-		// 3. Enable Fire UI
 		fireManager.setTurnActive(true);
 		
-		// 4. Start Timer
 		if (timerInterval) clearInterval(timerInterval);
 		timerInterval = setInterval(() => {
 			timeLeft--;
 			updateTimerUI();
-			
-			if (timeLeft <= 0) {
-				endTurn();
-			}
+			if (timeLeft <= 0) endTurn();
 		}, 1000);
 	};
 	
@@ -105,48 +89,31 @@ const createScene = async function () {
 		clearInterval(timerInterval);
 		btnEndTurn.disabled = true;
 		
-		// 1. Disable Player Input
 		playerManager.disableInput();
-		
-		// 2. Hide Fire UI
 		fireManager.setTurnActive(false);
 		
-		// 3. Resolve Turn (Rewind -> Replay)
-		
-		// Capture where the player ended up
-		const targetPos = playerRoot.absolutePosition.clone();
-		const targetRot = playerVisual.rotation.y;
-		
-		// Get Fire Data (if any)
-		const shotData = fireManager.getLastShotData();
-		
-		// Start the Rewind -> Replay sequence
-		playerManager.resolveTurnWithRewind(
-			targetPos,
-			targetRot,
-			shotData,
-			// Callback: On Replay Start (Rewind Complete)
-			// This is when we unfreeze the balls, because the player is safely back at the start.
+		// Resolve Turn: Rewind -> Replay Waypoints
+		playerManager.resolveTurnWithWaypoints(
+			// Fire Callback (Replay Phase)
+			(waypointData) => {
+				fireManager.fireFromWaypoint(waypointData);
+			},
+			// On Replay Start (Rewind Complete)
 			() => {
 				sceneAltManager.setBallsFrozen(false);
 			},
-			// Callback: Fire the bullet when player reaches fire position
+			// On Complete
 			() => {
-				if (shotData) {
-					fireManager.fireFromData(shotData);
-				}
-			},
-			// Callback: Animation Complete (Replay Complete)
-			() => {
-				// Start next turn
 				startTurn();
+			},
+			// On Progress (Update Timeline UI)
+			(index) => {
+				timelineManager.updateProgress(index);
 			}
 		);
 	};
 	
 	btnEndTurn.addEventListener('click', endTurn);
-	
-	// Start the first turn
 	startTurn();
 	
 	return scene;
