@@ -1,7 +1,8 @@
 import * as BABYLON from 'babylonjs';
 
 export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager) => {
-	const thrownBalls = [];
+	// --- CHANGED: Renamed thrownBalls to bullets ---
+	const bullets = [];
 	let currentCharge = 0;
 	const maxCharge = 50;
 	const chargeRate = 0.5;
@@ -10,14 +11,13 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const powerContainer = document.getElementById('power-container');
 	const powerBar = document.getElementById('power-bar');
 	
-	// --- NEW: Target Selection Variables ---
+	// --- Target Selection Variables ---
 	let currentTarget = null;
 	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
-	// Color for the glow effect (Greenish-Blue)
 	const targetColor = new BABYLON.Color3(0, 1, 1);
 	
-	// --- NEW: Explosion Logic ---
-	const createExplosion = (position) => {
+	// --- Explosion Logic ---
+	const createExplosion = (position, color = null) => {
 		// 1. Visual Fragments (Debris)
 		const fragmentCount = 8;
 		for (let i = 0; i < fragmentCount; i++) {
@@ -30,9 +30,14 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				(Math.random() - 0.5) * 0.5
 			));
 			
-			// Fragment Material (Orange/Yellow for explosion look)
+			// Fragment Material
 			const fragMat = new BABYLON.StandardMaterial('fragMat', scene);
-			fragMat.diffuseColor = new BABYLON.Color3(1, 0.5 + Math.random() * 0.5, 0);
+			if (color) {
+				fragMat.diffuseColor = color;
+			} else {
+				// Default Orange/Yellow for explosion look
+				fragMat.diffuseColor = new BABYLON.Color3(1, 0.5 + Math.random() * 0.5, 0);
+			}
 			frag.material = fragMat;
 			
 			// Fragment Physics
@@ -75,12 +80,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		});
 	};
 	
-	// --- NEW: Target Management Functions ---
+	// --- Target Management Functions ---
 	
-	// Helper to find all valid targets currently in the camera's view
 	const getVisibleTargets = () => {
 		const camera = cameraManager.getActiveCamera();
-		// Filter meshes: Must start with 'sphere' (from game-scene-alt), be enabled, and inside frustum
 		return scene.meshes.filter(m => {
 			return m.name.startsWith('sphere') &&
 				m.isEnabled() &&
@@ -93,13 +96,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const visibleTargets = getVisibleTargets();
 		
 		if (visibleTargets.length === 0) {
-			// No targets available
 			setTarget(null);
 			return;
 		}
 		
-		// Sort targets to ensure consistent cycling order (e.g., by name or distance)
-		// Here we sort by name for stability
 		visibleTargets.sort((a, b) => a.name.localeCompare(b.name));
 		
 		let nextIndex = 0;
@@ -107,7 +107,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		if (currentTarget) {
 			const currentIndex = visibleTargets.indexOf(currentTarget);
 			if (currentIndex !== -1) {
-				// Pick the next one, wrapping around
 				nextIndex = (currentIndex + 1) % visibleTargets.length;
 			}
 		}
@@ -116,20 +115,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	};
 	
 	const setTarget = (mesh) => {
-		// Clear previous highlight
 		if (currentTarget) {
 			highlightLayer.removeMesh(currentTarget);
 		}
 		
 		currentTarget = mesh;
 		
-		// Add new highlight
 		if (currentTarget) {
 			highlightLayer.addMesh(currentTarget, targetColor);
 		}
 	};
 	
-	// Input handling for charging/firing/targeting
+	// Input handling
 	const inputMap = {};
 	scene.onKeyboardObservable.add((kbInfo) => {
 		const type = kbInfo.type;
@@ -140,64 +137,64 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		} else if (type === BABYLON.KeyboardEventTypes.KEYUP) {
 			inputMap[key] = false;
 			
-			if (key === 'c') {
-				fireBall();
+			if (key === 'z') {
+				fireBullet();
 			}
-			// --- NEW: Cycle Target on 'x' ---
-			if (key === 'x') {
+			if (key === 'c') {
 				cycleTarget();
 			}
 		}
 	});
 	
-	const fireBall = () => {
+	// --- CHANGED: Renamed fireBall to fireBullet ---
+	const fireBullet = () => {
 		const throwPower = Math.max(minCharge, currentCharge);
 		
-		// Create Ball
-		const ball = BABYLON.MeshBuilder.CreateSphere('thrownBall', { diameter: 0.8 }, scene);
-		ball.material = new BABYLON.StandardMaterial('thrownMat', scene);
-		ball.material.diffuseColor = new BABYLON.Color3(1, 0, 0);
+		// Create Bullet (formerly Ball)
+		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', { diameter: 0.4 }, scene);
+		bullet.material = new BABYLON.StandardMaterial('bulletMat', scene);
+		bullet.material.diffuseColor = new BABYLON.Color3(1, 1, 0); // Yellow bullet
+		bullet.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0);
 		
 		// Calculate Spawn Position
 		const spawnPos = playerVisual.absolutePosition.clone();
-		spawnPos.y += 1.5; // Eye level
+		spawnPos.y += 1.5;
 		
-		// Get aim direction from player visual
+		// Get aim direction
 		const aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
 		aimDir.normalize();
 		
-		// Offset spawn
-		ball.position = spawnPos.add(aimDir.scale(1.5));
+		bullet.position = spawnPos.add(aimDir.scale(1.5));
 		
-		shadowGenerator.addShadowCaster(ball);
+		shadowGenerator.addShadowCaster(bullet);
 		
 		// Physics
-		const ballAgg = new BABYLON.PhysicsAggregate(
-			ball,
+		const bulletAgg = new BABYLON.PhysicsAggregate(
+			bullet,
 			BABYLON.PhysicsShapeType.SPHERE,
 			{ mass: 0.5, restitution: 0.8 },
 			scene
 		);
 		
-		// Apply Force (Initial Launch)
-		ballAgg.body.applyImpulse(aimDir.scale(throwPower), ball.absolutePosition);
+		// Apply Force
+		bulletAgg.body.applyImpulse(aimDir.scale(throwPower), bullet.absolutePosition);
 		
 		// Track
-		// --- CHANGED: Store target in ball data ---
-		const ballData = {
-			mesh: ball,
-			agg: ballAgg,
+		// --- CHANGED: Renamed ballData to bulletData ---
+		const bulletData = {
+			mesh: bullet,
+			agg: bulletAgg,
 			age: 0,
 			isDead: false,
-			target: currentTarget // Attach current target (can be null)
+			target: currentTarget
 		};
-		thrownBalls.push(ballData);
+		bullets.push(bulletData);
 		
 		// --- Collision Logic ---
-		ballAgg.body.setCollisionCallbackEnabled(true);
+		bulletAgg.body.setCollisionCallbackEnabled(true);
 		
-		const collisionObserver = ballAgg.body.getCollisionObservable().add((event) => {
-			if (ballData.isDead) return;
+		const collisionObserver = bulletAgg.body.getCollisionObservable().add((event) => {
+			if (bulletData.isDead) return;
 			
 			const hitBody = event.collidedAgainst;
 			if (!hitBody || !hitBody.transformNode) return;
@@ -205,18 +202,41 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const hitMesh = hitBody.transformNode;
 			const name = hitMesh.name;
 			
-			// Requirement: Bounce on ground, Explode on Wall or Ball
-			const isTarget = name.includes('wall') || name.includes('sphere') || name.includes('thrownBall');
+			// Check what we hit
+			const isWall = name.includes('wall');
+			const isTargetSphere = name.includes('sphere');
+			const isOtherBullet = name.includes('bullet');
 			
-			if (isTarget) {
-				createExplosion(ball.absolutePosition);
-				ballData.isDead = true;
-				ballAgg.body.getCollisionObservable().remove(collisionObserver);
+			if (isWall || isTargetSphere || isOtherBullet) {
+				// 1. Explode the bullet itself
+				createExplosion(bullet.absolutePosition);
 				
-				// If we hit the target we were aiming at, clear the global target selection
-				if (ballData.target && hitMesh === ballData.target) {
-					setTarget(null);
+				// --- CHANGED: Logic for destroying the target ---
+				if (isTargetSphere) {
+					// 2. Explode the target sphere
+					// Pass the sphere's color if possible, or default
+					let debrisColor = null;
+					if (hitMesh.material && hitMesh.material.diffuseColor) {
+						debrisColor = hitMesh.material.diffuseColor;
+					}
+					createExplosion(hitMesh.absolutePosition, debrisColor);
+					
+					// 3. Destroy the target
+					// If this was our locked target, clear the lock first
+					if (currentTarget === hitMesh) {
+						setTarget(null);
+					} else if (bulletData.target === hitMesh) {
+						// If it was the specific target of this bullet
+						setTarget(null);
+					}
+					
+					// Dispose the mesh (PhysicsAggregate usually cleans up automatically with mesh disposal in Havok plugin)
+					hitMesh.dispose();
 				}
+				
+				// Mark bullet for removal
+				bulletData.isDead = true;
+				bulletAgg.body.getCollisionObservable().remove(collisionObserver);
 			}
 		});
 		
@@ -230,54 +250,49 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		
-		// --- NEW: Check Target Visibility ---
 		if (currentTarget) {
 			const camera = cameraManager.getActiveCamera();
-			// If target is disposed or out of view, deselect it
 			if (currentTarget.isDisposed() || !currentTarget.isEnabled() || !camera.isInFrustum(currentTarget)) {
 				setTarget(null);
 			}
 		}
 		
-		// 1. Lifecycle Management & Homing Logic
-		for (let i = thrownBalls.length - 1; i >= 0; i--) {
-			const b = thrownBalls[i];
+		// --- CHANGED: Iterate over bullets array ---
+		for (let i = bullets.length - 1; i >= 0; i--) {
+			const b = bullets[i];
 			b.age += dt;
 			
 			if (b.isDead) {
 				b.agg.dispose();
 				b.mesh.dispose();
-				thrownBalls.splice(i, 1);
+				bullets.splice(i, 1);
 				continue;
 			}
 			
-			// --- NEW: Homing Logic ---
+			// Homing Logic
 			if (b.target && !b.target.isDisposed()) {
-				// Calculate direction to target
 				const targetPos = b.target.absolutePosition;
-				const ballPos = b.mesh.absolutePosition;
-				const direction = targetPos.subtract(ballPos).normalize();
+				const bulletPos = b.mesh.absolutePosition;
+				const direction = targetPos.subtract(bulletPos).normalize();
 				
-				// Apply homing force (steering)
-				// We apply a continuous force to steer the ball towards the target
-				const homingForce = 15.0 * dt; // Adjust strength as needed
-				b.agg.body.applyImpulse(direction.scale(homingForce), ballPos);
+				const homingForce = 15.0 * dt;
+				b.agg.body.applyImpulse(direction.scale(homingForce), bulletPos);
 			}
 			
-			// Increased lifetime to allow for bounces
+			// Lifetime check
 			if (b.age > 5.0) {
 				b.mesh.scaling.scaleInPlace(0.98);
 				
 				if (b.mesh.scaling.x < 0.1) {
 					b.agg.dispose();
 					b.mesh.dispose();
-					thrownBalls.splice(i, 1);
+					bullets.splice(i, 1);
 				}
 			}
 		}
 		
-		// 2. Charging Logic
-		if (inputMap['c']) {
+		// Charging Logic
+		if (inputMap['z']) {
 			if (currentCharge < maxCharge) {
 				currentCharge += chargeRate;
 				if (currentCharge > maxCharge) currentCharge = maxCharge;
