@@ -111,8 +111,7 @@ const createScene = async function () {
 		// 2. Hide Fire UI
 		fireManager.setTurnActive(false);
 		
-		// 3. Resolve Movement (Cinematic)
-		// CRITICAL: We reset the player position BEFORE unfreezing balls to avoid collisions at the end position.
+		// 3. Resolve Turn (Rewind -> Replay)
 		
 		// Capture where the player ended up
 		const targetPos = playerRoot.absolutePosition.clone();
@@ -121,27 +120,28 @@ const createScene = async function () {
 		// Get Fire Data (if any)
 		const shotData = fireManager.getLastShotData();
 		
-		// Reset and Animate
-		playerManager.resolveMovement(
+		// Start the Rewind -> Replay sequence
+		playerManager.resolveTurnWithRewind(
 			targetPos,
 			targetRot,
 			shotData,
+			// Callback: On Replay Start (Rewind Complete)
+			// This is when we unfreeze the balls, because the player is safely back at the start.
+			() => {
+				sceneAltManager.setBallsFrozen(false);
+			},
 			// Callback: Fire the bullet when player reaches fire position
 			() => {
 				if (shotData) {
 					fireManager.fireFromData(shotData);
 				}
 			},
-			// Callback: Animation Complete
+			// Callback: Animation Complete (Replay Complete)
 			() => {
 				// Start next turn
 				startTurn();
 			}
 		);
-		
-		// 4. Unfreeze Balls (Start moving again)
-		// Safe to do now because player has been teleported to start by resolveMovement
-		sceneAltManager.setBallsFrozen(false);
 	};
 	
 	btnEndTurn.addEventListener('click', endTurn);

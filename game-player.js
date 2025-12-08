@@ -61,10 +61,21 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	let turnStartRotation = 0; // Store initial Y rotation
 	const maxTurnRadius = 15.0; // Fixed radius limit
 	
-	// Cinematic Move Variables
-	let isResolvingMove = false;
+	// --- Cinematic / Replay Variables ---
+	let animationState = 'NONE'; // 'NONE', 'REWIND', 'REPLAY'
 	
-	// Replay State
+	// Rewind State (End -> Start)
+	let rewindState = {
+		startPos: new BABYLON.Vector3(),
+		startRot: 0,
+		endPos: new BABYLON.Vector3(), // Target (Turn Start)
+		endRot: 0,
+		startTime: 0,
+		duration: 3.0,
+		onRewindComplete: null
+	};
+	
+	// Replay State (Start -> End)
 	let replayState = {
 		startPos: new BABYLON.Vector3(),
 		startRot: 0,
@@ -80,14 +91,52 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		onCompleteCallback: null
 	};
 	
-	const totalResolveDuration = 5.0; // Total time for the cinematic
+	const totalResolveDuration = 5.0; // Total time for the forward replay
 	
 	// --- Movement Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body) return;
 		
-		// --- NEW: Handle Cinematic Resolution Movement ---
-		if (isResolvingMove) {
+		// =================================================================
+		// 1. REWIND PHASE (End of Turn -> Start Position)
+		// =================================================================
+		if (animationState === 'REWIND') {
+			const now = performance.now();
+			const elapsed = (now - rewindState.startTime) / 1000;
+			const t = Math.min(elapsed / rewindState.duration, 1.0);
+			
+			// Smooth EaseInOut
+			const smoothT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+			
+			const currentPos = BABYLON.Vector3.Lerp(rewindState.startPos, rewindState.endPos, smoothT);
+			// We don't necessarily need to interpolate rotation for rewind, but let's keep it smooth
+			// We might want to keep looking at the "end" direction or lerp back. Let's lerp back.
+			const currentRot = BABYLON.Scalar.LerpAngle(rewindState.startRot, rewindState.endRot, smoothT);
+			
+			// Apply Transform (Kinematic)
+			playerAgg.body.setTargetTransform(currentPos, playerRoot.rotationQuaternion);
+			playerVisual.rotation.y = currentRot;
+			
+			if (t >= 1.0) {
+				// Rewind Complete
+				animationState = 'REPLAY';
+				
+				// Reset Visuals
+				playerMat.alpha = 1.0; // Restore Opacity
+				
+				// Trigger Callback (Unfreeze balls now)
+				if (rewindState.onRewindComplete) rewindState.onRewindComplete();
+				
+				// Initialize Replay Timer
+				replayState.startTime = performance.now();
+			}
+			return;
+		}
+		
+		// =================================================================
+		// 2. REPLAY PHASE (Start Position -> End of Turn)
+		// =================================================================
+		if (animationState === 'REPLAY') {
 			const now = performance.now();
 			const elapsedTotal = (now - replayState.startTime) / 1000;
 			
@@ -139,12 +188,16 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			
 			// Check Completion
 			if (elapsedTotal >= totalResolveDuration) {
-				isResolvingMove = false;
+				animationState = 'NONE';
 				playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
 				if (replayState.onCompleteCallback) replayState.onCompleteCallback();
 			}
-			return; // Skip standard input logic
+			return;
 		}
+		
+		// =================================================================
+		// 3. STANDARD INPUT LOOP
+		// =================================================================
 		
 		// Skip input if disabled
 		if (!isInputEnabled) {
@@ -253,25 +306,33 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		disableInput: () => {
 			isInputEnabled = false;
 		},
-		resolveMovement: (targetPos, targetRot, shotData, onFireCallback, onComplete) => {
-			isResolvingMove = true;
-			
-			// 1. Reset to start position instantly
-			if (!playerRoot.rotationQuaternion) {
-				playerRoot.rotationQuaternion = BABYLON.Quaternion.Identity();
-			}
-			playerAgg.body.setTargetTransform(turnStartPosition, playerRoot.rotationQuaternion);
+		// --- NEW: Rewind and Replay Logic ---
+		resolveTurnWithRewind: (targetPos, targetRot, shotData, onReplayStart, onFire, onComplete) => {
+			// 1. Immediate Physics Reset
+			// Switch to ANIMATED (Kinematic) immediately to stop collision interactions
+			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 			playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
 			playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
-			playerVisual.rotation.y = turnStartRotation;
 			
-			// 2. Setup Replay State
+			// 2. Setup Rewind State
+			animationState = 'REWIND';
+			
+			// Visual Ghost Effect
+			playerMat.alpha = 0.3;
+			
+			rewindState.startPos.copyFrom(playerRoot.absolutePosition);
+			rewindState.startRot = playerVisual.rotation.y;
+			rewindState.endPos.copyFrom(turnStartPosition);
+			rewindState.endRot = turnStartRotation;
+			rewindState.startTime = performance.now();
+			rewindState.onRewindComplete = onReplayStart; // Callback to unfreeze balls
+			
+			// 3. Setup Replay State (Pre-calculation)
 			replayState.startPos.copyFrom(turnStartPosition);
 			replayState.startRot = turnStartRotation;
 			replayState.endPos.copyFrom(targetPos);
 			replayState.endRot = targetRot;
-			replayState.startTime = performance.now();
-			replayState.onFireCallback = onFireCallback;
+			replayState.onFireCallback = onFire;
 			replayState.onCompleteCallback = onComplete;
 			replayState.hasFired = false;
 			
@@ -295,9 +356,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 				replayState.durationA = totalResolveDuration;
 				replayState.durationB = 0;
 			}
-			
-			// Switch to Kinematic for smooth controlled movement
-			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 		}
 	};
 };
