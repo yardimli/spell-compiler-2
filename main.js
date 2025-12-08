@@ -115,20 +115,31 @@ const createScene = async function () {
 		// 3. Unfreeze Balls (Start moving again)
 		sceneAltManager.setBallsFrozen(false);
 		
-		// 4. Execute Fire (if queued)
-		// Prompt says: "user should fire the bullet before starting to move"
-		fireManager.executeTurnFire();
-		
-		// 5. Resolve Movement (Cinematic)
+		// 4. Resolve Movement (Cinematic)
 		// Capture where the player ended up
 		const targetPos = playerRoot.absolutePosition.clone();
+		const targetRot = playerVisual.rotation.y;
+		
+		// Get Fire Data (if any)
+		const shotData = fireManager.getLastShotData();
 		
 		// Reset and Animate
-		playerManager.resolveMovement(targetPos, () => {
-			// Callback when movement animation is done
-			// Start next turn
-			startTurn();
-		});
+		playerManager.resolveMovement(
+			targetPos,
+			targetRot,
+			shotData,
+			// Callback: Fire the bullet when player reaches fire position
+			() => {
+				if (shotData) {
+					fireManager.fireFromData(shotData);
+				}
+			},
+			// Callback: Animation Complete
+			() => {
+				// Start next turn
+				startTurn();
+			}
+		);
 	};
 	
 	btnEndTurn.addEventListener('click', endTurn);

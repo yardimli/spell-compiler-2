@@ -58,15 +58,29 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	// --- NEW: Turn System Variables ---
 	let isInputEnabled = true;
 	let turnStartPosition = new BABYLON.Vector3(0, 5, 0);
+	let turnStartRotation = 0; // Store initial Y rotation
 	const maxTurnRadius = 15.0; // Fixed radius limit
 	
 	// Cinematic Move Variables
 	let isResolvingMove = false;
-	let resolveStartPos = new BABYLON.Vector3();
-	let resolveTargetPos = new BABYLON.Vector3();
-	let resolveStartTime = 0;
-	const resolveDuration = 5.0; // 5 seconds
-	let onResolveComplete = null;
+	
+	// Replay State
+	let replayState = {
+		startPos: new BABYLON.Vector3(),
+		startRot: 0,
+		midPos: null, // Fire position
+		midRot: 0,    // Fire rotation
+		endPos: new BABYLON.Vector3(),
+		endRot: 0,
+		hasFired: false,
+		durationA: 0, // Start -> Mid
+		durationB: 0, // Mid -> End
+		startTime: 0,
+		onFireCallback: null,
+		onCompleteCallback: null
+	};
+	
+	const totalResolveDuration = 5.0; // Total time for the cinematic
 	
 	// --- Movement Loop ---
 	scene.onBeforeRenderObservable.add(() => {
@@ -75,22 +89,61 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		// --- NEW: Handle Cinematic Resolution Movement ---
 		if (isResolvingMove) {
 			const now = performance.now();
-			const elapsed = (now - resolveStartTime) / 1000;
-			const t = Math.min(elapsed / resolveDuration, 1.0);
+			const elapsedTotal = (now - replayState.startTime) / 1000;
 			
-			// Smooth Step interpolation
-			const smoothT = t * t * (3 - 2 * t);
+			let currentTargetPos = new BABYLON.Vector3();
+			let currentTargetRot = 0;
 			
-			const newPos = BABYLON.Vector3.Lerp(resolveStartPos, resolveTargetPos, smoothT);
+			if (replayState.midPos) {
+				// --- Two-Stage Replay (Start -> Fire -> End) ---
+				
+				if (elapsedTotal < replayState.durationA) {
+					// Phase 1: Moving to Fire Position
+					const t = Math.min(elapsedTotal / replayState.durationA, 1.0);
+					const smoothT = t * t * (3 - 2 * t); // EaseInOut
+					
+					currentTargetPos = BABYLON.Vector3.Lerp(replayState.startPos, replayState.midPos, smoothT);
+					currentTargetRot = BABYLON.Scalar.LerpAngle(replayState.startRot, replayState.midRot, smoothT);
+					
+				} else {
+					// Check if we need to fire (once)
+					if (!replayState.hasFired) {
+						replayState.hasFired = true;
+						if (replayState.onFireCallback) replayState.onFireCallback();
+					}
+					
+					// Phase 2: Moving to End Position
+					const elapsedPhase2 = elapsedTotal - replayState.durationA;
+					const t = Math.min(elapsedPhase2 / replayState.durationB, 1.0);
+					
+					// If durationB is 0 (fired at very end), t is 1
+					if (replayState.durationB <= 0.001) {
+						currentTargetPos.copyFrom(replayState.endPos);
+						currentTargetRot = replayState.endRot;
+					} else {
+						const smoothT = t * t * (3 - 2 * t);
+						currentTargetPos = BABYLON.Vector3.Lerp(replayState.midPos, replayState.endPos, smoothT);
+						currentTargetRot = BABYLON.Scalar.LerpAngle(replayState.midRot, replayState.endRot, smoothT);
+					}
+				}
+			} else {
+				// --- Single-Stage Replay (Start -> End) ---
+				const t = Math.min(elapsedTotal / totalResolveDuration, 1.0);
+				const smoothT = t * t * (3 - 2 * t);
+				
+				currentTargetPos = BABYLON.Vector3.Lerp(replayState.startPos, replayState.endPos, smoothT);
+				currentTargetRot = BABYLON.Scalar.LerpAngle(replayState.startRot, replayState.endRot, smoothT);
+			}
 			
-			// Move physics body kinematically to avoid physics issues
-			playerAgg.body.setTargetTransform(newPos, playerRoot.rotationQuaternion);
+			// Apply Transform
+			playerAgg.body.setTargetTransform(currentTargetPos, playerRoot.rotationQuaternion);
+			playerVisual.rotation.y = currentTargetRot;
 			
-			if (t >= 1.0) {
+			// Check Completion
+			if (elapsedTotal >= totalResolveDuration) {
 				isResolvingMove = false;
-				// Re-enable dynamics
 				playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
-				if (onResolveComplete) onResolveComplete();
+				if (replayState.onCompleteCallback) replayState.onCompleteCallback();
 			}
 			return; // Skip standard input logic
 		}
@@ -154,20 +207,15 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		
 		const targetVelocity = moveDir.scale(speed);
 		
-		// --- NEW: Radius Constraint Logic ---
-		// Calculate where we would be
+		// --- Radius Constraint Logic ---
 		const nextPos = playerRoot.absolutePosition.add(targetVelocity.scale(scene.getEngine().getDeltaTime() / 1000));
 		const distFromStart = BABYLON.Vector3.Distance(
 			new BABYLON.Vector3(nextPos.x, 0, nextPos.z),
 			new BABYLON.Vector3(turnStartPosition.x, 0, turnStartPosition.z)
 		);
 		
-		// If trying to move outside radius, zero out velocity in that direction
 		if (distFromStart > maxTurnRadius) {
-			// Simple clamp: stop movement if moving away
-			// Vector from center to player
 			const toPlayer = nextPos.subtract(turnStartPosition);
-			// If dot product of velocity and toPlayer is positive, we are moving away
 			if (BABYLON.Vector3.Dot(targetVelocity, toPlayer) > 0) {
 				targetVelocity.x = 0;
 				targetVelocity.z = 0;
@@ -203,24 +251,56 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		startTurn: () => {
 			isInputEnabled = true;
 			turnStartPosition.copyFrom(playerRoot.absolutePosition);
+			// Record start rotation for replay
+			turnStartRotation = playerVisual.rotation.y;
 		},
 		// Called when turn ends (before resolution)
 		disableInput: () => {
 			isInputEnabled = false;
 		},
 		// Called to execute the cinematic move
-		resolveMovement: (targetPos, callback) => {
+		// shotData: { position, rotation } or null
+		resolveMovement: (targetPos, targetRot, shotData, onFireCallback, onComplete) => {
 			isResolvingMove = true;
-			onResolveComplete = callback;
 			
 			// 1. Reset to start position instantly
-			// We use setTargetTransform to teleport physics body
 			playerAgg.body.setTargetTransform(turnStartPosition, playerRoot.rotationQuaternion);
+			playerVisual.rotation.y = turnStartRotation;
 			
-			// 2. Setup Lerp
-			resolveStartPos.copyFrom(turnStartPosition);
-			resolveTargetPos.copyFrom(targetPos);
-			resolveStartTime = performance.now();
+			// 2. Setup Replay State
+			replayState.startPos.copyFrom(turnStartPosition);
+			replayState.startRot = turnStartRotation;
+			replayState.endPos.copyFrom(targetPos);
+			replayState.endRot = targetRot;
+			replayState.startTime = performance.now();
+			replayState.onFireCallback = onFireCallback;
+			replayState.onCompleteCallback = onComplete;
+			replayState.hasFired = false;
+			
+			if (shotData) {
+				// We have a shot to replay
+				replayState.midPos = shotData.position.clone();
+				replayState.midRot = shotData.rotation;
+				
+				// Calculate distances to split time proportionally
+				const distA = BABYLON.Vector3.Distance(replayState.startPos, replayState.midPos);
+				const distB = BABYLON.Vector3.Distance(replayState.midPos, replayState.endPos);
+				const totalDist = distA + distB;
+				
+				if (totalDist < 0.1) {
+					// No movement, just fire
+					replayState.durationA = totalResolveDuration / 2;
+					replayState.durationB = totalResolveDuration / 2;
+				} else {
+					replayState.durationA = (distA / totalDist) * totalResolveDuration;
+					replayState.durationB = (distB / totalDist) * totalResolveDuration;
+				}
+			} else {
+				// No shot, simple move
+				replayState.midPos = null;
+				replayState.durationA = totalResolveDuration;
+				replayState.durationB = 0;
+			}
 			
 			// Switch to Kinematic for smooth controlled movement
 			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);

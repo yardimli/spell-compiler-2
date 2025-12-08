@@ -12,6 +12,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const powerBar = document.getElementById('power-bar');
 	const fireCheckbox = document.getElementById('chk-fire');
 	const fireControl = document.getElementById('fire-control');
+	const btnEndTurn = document.getElementById('btn-end-turn'); // Needed for focus logic
 	
 	// --- Target Selection Variables ---
 	let currentTarget = null;
@@ -21,6 +22,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	// --- Turn State Variables ---
 	let isTurnActive = true;
 	let willFireAtEnd = false;
+	
+	// --- NEW: Shot Recording ---
+	// Stores the data of the last ghost bullet fired during the turn
+	let lastShotData = null;
+	
+	// --- Helper: Refocus Canvas ---
+	const refocusCanvas = () => {
+		const canvas = scene.getEngine().getRenderingCanvas();
+		if (canvas) {
+			canvas.focus();
+		}
+	};
 	
 	// --- Explosion Logic ---
 	const createExplosion = (position, color = null) => {
@@ -135,14 +148,24 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		}
 	});
 	
-	// --- Checkbox Logic ---
+	// --- Checkbox & UI Logic ---
 	fireCheckbox.addEventListener('change', (e) => {
 		willFireAtEnd = e.target.checked;
+		// NEW: Focus back to game
+		refocusCanvas();
 	});
+	
+	// NEW: Focus back to game when clicking End Turn (though main.js handles the click logic, we ensure focus)
+	if (btnEndTurn) {
+		btnEndTurn.addEventListener('click', () => {
+			refocusCanvas();
+		});
+	}
 	
 	// --- Fire Bullet Logic ---
 	// isReal: true = End of turn shot (explodes), false = Test shot (bounces, no damage)
-	const fireBullet = (isReal, power) => {
+	// overrideData: Optional object { position, rotation, target } to force firing from a specific spot (used in replay)
+	const fireBullet = (isReal, power, overrideData = null) => {
 		const throwPower = power;
 		
 		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', { diameter: 0.4 }, scene);
@@ -155,17 +178,54 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			// Ghost Bullet Appearance
 			bullet.material.diffuseColor = new BABYLON.Color3(1, 1, 1);
 			bullet.material.alpha = 0.5; // Semi-transparent
+			
+			// --- NEW: Record this shot as the "Last Fired Position" ---
+			// We record where the player IS right now, and where they are looking
+			lastShotData = {
+				position: playerVisual.absolutePosition.clone(),
+				rotation: playerVisual.rotation.y, // Store Y rotation
+				power: power,
+				target: currentTarget // Snapshot the target
+			};
+			
+			// --- NEW: Auto-check the fire checkbox ---
+			if (!fireCheckbox.checked) {
+				fireCheckbox.checked = true;
+				willFireAtEnd = true;
+			}
 		}
 		
-		const spawnPos = playerVisual.absolutePosition.clone();
-		spawnPos.y += 1.5;
-		
+		// Determine Spawn Position
+		let spawnPos;
 		let aimDir;
-		if (currentTarget && !currentTarget.isDisposed()) {
-			aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
+		
+		if (overrideData) {
+			// Replay Mode: Use the recorded position
+			spawnPos = overrideData.position.clone();
+			spawnPos.y += 1.5;
+			
+			// Calculate direction based on recorded target or recorded rotation
+			if (overrideData.target && !overrideData.target.isDisposed()) {
+				aimDir = overrideData.target.absolutePosition.subtract(spawnPos).normalize();
+			} else {
+				// If no target, use the rotation stored in overrideData
+				// Create a rotation matrix from the stored Y rotation
+				const rotationMatrix = BABYLON.Matrix.RotationY(overrideData.rotation);
+				// Transform Forward vector by this rotation
+				aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix);
+				aimDir.normalize();
+			}
 		} else {
-			aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
-			aimDir.normalize();
+			// Live Mode: Use current player position
+			spawnPos = playerVisual.absolutePosition.clone();
+			spawnPos.y += 1.5;
+			
+			if (currentTarget && !currentTarget.isDisposed()) {
+				aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
+			} else {
+				aimDir = playerVisual.getDirection(BABYLON.Vector3.Forward());
+				aimDir.normalize();
+			}
 		}
 		
 		bullet.position = spawnPos.add(aimDir.scale(1.5));
@@ -186,7 +246,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			agg: bulletAgg,
 			age: 0,
 			isDead: false,
-			target: currentTarget,
+			target: overrideData ? overrideData.target : currentTarget,
 			isReal: isReal
 		};
 		bullets.push(bulletData);
@@ -207,7 +267,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const isOtherBullet = name.includes('bullet');
 			
 			if (isWall || isTargetSphere || isOtherBullet) {
-				
 				// If it's a Real Bullet, it explodes and destroys
 				if (isReal) {
 					createExplosion(bullet.absolutePosition);
@@ -219,6 +278,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 						}
 						createExplosion(hitMesh.absolutePosition, debrisColor);
 						
+						// Note: In replay, we might be hitting a target that was already hit?
+						// For simplicity, we assume targets reset or persist correctly.
 						if (currentTarget === hitMesh) setTarget(null);
 						
 						hitMesh.dispose();
@@ -230,9 +291,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				} else {
 					// If it's a Test Bullet
 					// It should NOT explode itself immediately on wall hit, so user sees bounce.
-					// But if it hits a target, maybe it just bounces off?
-					// We do nothing here, letting physics handle the bounce.
-					// We only destroy it if it's "stuck" or too old (handled in render loop)
 				}
 			}
 		});
@@ -303,17 +361,20 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				fireControl.classList.remove('hidden');
 				fireCheckbox.checked = false;
 				willFireAtEnd = false;
-				// Keep stored charge from previous turn? Or reset?
-				// "last power user sets should be the one used" implies persistence.
+				lastShotData = null; // Reset shot history for new turn
 			} else {
 				fireControl.classList.add('hidden');
 			}
 		},
-		executeTurnFire: () => {
-			if (willFireAtEnd) {
-				// Use the stored charge to fire a REAL bullet
-				const power = storedCharge > 0 ? storedCharge : minCharge;
-				fireBullet(true, power);
+		// Returns the data of the last ghost shot fired
+		getLastShotData: () => {
+			// Only return data if the user actually wants to fire (checkbox checked)
+			return willFireAtEnd ? lastShotData : null;
+		},
+		// Executes a real fire event based on provided data (used in replay)
+		fireFromData: (data) => {
+			if (data) {
+				fireBullet(true, data.power, data);
 			}
 		}
 	};
