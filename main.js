@@ -65,7 +65,6 @@ const createScene = async function () {
 	const updateTimerUI = () => {
 		timerText.innerText = timeLeft;
 		const percentage = (timeLeft / TURN_DURATION) * 100;
-		// Update conic gradient
 		timerSpinner.style.background = `conic-gradient(#00ff00 ${percentage}%, #333 0%)`;
 		
 		if (timeLeft <= 5) {
@@ -112,10 +111,9 @@ const createScene = async function () {
 		// 2. Hide Fire UI
 		fireManager.setTurnActive(false);
 		
-		// 3. Unfreeze Balls (Start moving again)
-		sceneAltManager.setBallsFrozen(false);
+		// 3. Resolve Movement (Cinematic)
+		// CRITICAL: We reset the player position BEFORE unfreezing balls to avoid collisions at the end position.
 		
-		// 4. Resolve Movement (Cinematic)
 		// Capture where the player ended up
 		const targetPos = playerRoot.absolutePosition.clone();
 		const targetRot = playerVisual.rotation.y;
@@ -140,6 +138,10 @@ const createScene = async function () {
 				startTurn();
 			}
 		);
+		
+		// 4. Unfreeze Balls (Start moving again)
+		// Safe to do now because player has been teleported to start by resolveMovement
+		sceneAltManager.setBallsFrozen(false);
 	};
 	
 	btnEndTurn.addEventListener('click', endTurn);

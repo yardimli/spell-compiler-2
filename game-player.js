@@ -96,7 +96,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			
 			if (replayState.midPos) {
 				// --- Two-Stage Replay (Start -> Fire -> End) ---
-				
 				if (elapsedTotal < replayState.durationA) {
 					// Phase 1: Moving to Fire Position
 					const t = Math.min(elapsedTotal / replayState.durationA, 1.0);
@@ -116,7 +115,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 					const elapsedPhase2 = elapsedTotal - replayState.durationA;
 					const t = Math.min(elapsedPhase2 / replayState.durationB, 1.0);
 					
-					// If durationB is 0 (fired at very end), t is 1
 					if (replayState.durationB <= 0.001) {
 						currentTargetPos.copyFrom(replayState.endPos);
 						currentTargetRot = replayState.endRot;
@@ -243,28 +241,28 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		}
 	});
 	
-	// --- NEW: Exposed Methods for Turn Manager ---
+	// --- Exposed Methods ---
 	return {
 		playerRoot,
 		playerVisual,
-		// Called when turn starts
 		startTurn: () => {
 			isInputEnabled = true;
 			turnStartPosition.copyFrom(playerRoot.absolutePosition);
-			// Record start rotation for replay
 			turnStartRotation = playerVisual.rotation.y;
 		},
-		// Called when turn ends (before resolution)
 		disableInput: () => {
 			isInputEnabled = false;
 		},
-		// Called to execute the cinematic move
-		// shotData: { position, rotation } or null
 		resolveMovement: (targetPos, targetRot, shotData, onFireCallback, onComplete) => {
 			isResolvingMove = true;
 			
 			// 1. Reset to start position instantly
+			if (!playerRoot.rotationQuaternion) {
+				playerRoot.rotationQuaternion = BABYLON.Quaternion.Identity();
+			}
 			playerAgg.body.setTargetTransform(turnStartPosition, playerRoot.rotationQuaternion);
+			playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
+			playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
 			playerVisual.rotation.y = turnStartRotation;
 			
 			// 2. Setup Replay State
@@ -278,17 +276,14 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			replayState.hasFired = false;
 			
 			if (shotData) {
-				// We have a shot to replay
 				replayState.midPos = shotData.position.clone();
 				replayState.midRot = shotData.rotation;
 				
-				// Calculate distances to split time proportionally
 				const distA = BABYLON.Vector3.Distance(replayState.startPos, replayState.midPos);
 				const distB = BABYLON.Vector3.Distance(replayState.midPos, replayState.endPos);
 				const totalDist = distA + distB;
 				
 				if (totalDist < 0.1) {
-					// No movement, just fire
 					replayState.durationA = totalResolveDuration / 2;
 					replayState.durationB = totalResolveDuration / 2;
 				} else {
@@ -296,7 +291,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 					replayState.durationB = (distB / totalDist) * totalResolveDuration;
 				}
 			} else {
-				// No shot, simple move
 				replayState.midPos = null;
 				replayState.durationA = totalResolveDuration;
 				replayState.durationB = 0;

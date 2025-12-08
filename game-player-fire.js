@@ -12,7 +12,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const powerBar = document.getElementById('power-bar');
 	const fireCheckbox = document.getElementById('chk-fire');
 	const fireControl = document.getElementById('fire-control');
-	const btnEndTurn = document.getElementById('btn-end-turn'); // Needed for focus logic
+	const btnEndTurn = document.getElementById('btn-end-turn');
 	
 	// --- Target Selection Variables ---
 	let currentTarget = null;
@@ -24,7 +24,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	let willFireAtEnd = false;
 	
 	// --- NEW: Shot Recording ---
-	// Stores the data of the last ghost bullet fired during the turn
 	let lastShotData = null;
 	
 	// --- Helper: Refocus Canvas ---
@@ -151,11 +150,9 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	// --- Checkbox & UI Logic ---
 	fireCheckbox.addEventListener('change', (e) => {
 		willFireAtEnd = e.target.checked;
-		// NEW: Focus back to game
 		refocusCanvas();
 	});
 	
-	// NEW: Focus back to game when clicking End Turn (though main.js handles the click logic, we ensure focus)
 	if (btnEndTurn) {
 		btnEndTurn.addEventListener('click', () => {
 			refocusCanvas();
@@ -180,12 +177,11 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			bullet.material.alpha = 0.5; // Semi-transparent
 			
 			// --- NEW: Record this shot as the "Last Fired Position" ---
-			// We record where the player IS right now, and where they are looking
 			lastShotData = {
 				position: playerVisual.absolutePosition.clone(),
-				rotation: playerVisual.rotation.y, // Store Y rotation
+				rotation: playerVisual.rotation.y,
 				power: power,
-				target: currentTarget // Snapshot the target
+				target: currentTarget
 			};
 			
 			// --- NEW: Auto-check the fire checkbox ---
@@ -209,9 +205,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				aimDir = overrideData.target.absolutePosition.subtract(spawnPos).normalize();
 			} else {
 				// If no target, use the rotation stored in overrideData
-				// Create a rotation matrix from the stored Y rotation
 				const rotationMatrix = BABYLON.Matrix.RotationY(overrideData.rotation);
-				// Transform Forward vector by this rotation
 				aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix);
 				aimDir.normalize();
 			}
@@ -278,8 +272,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 						}
 						createExplosion(hitMesh.absolutePosition, debrisColor);
 						
-						// Note: In replay, we might be hitting a target that was already hit?
-						// For simplicity, we assume targets reset or persist correctly.
 						if (currentTarget === hitMesh) setTarget(null);
 						
 						hitMesh.dispose();
@@ -288,9 +280,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					// Destroy bullet
 					bulletData.isDead = true;
 					bulletAgg.body.getCollisionObservable().remove(collisionObserver);
-				} else {
-					// If it's a Test Bullet
-					// It should NOT explode itself immediately on wall hit, so user sees bounce.
 				}
 			}
 		});
@@ -335,18 +324,15 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				currentCharge += chargeRate;
 				if (currentCharge > maxCharge) currentCharge = maxCharge;
 			}
-			// While charging, show the growing bar
 			powerContainer.style.display = 'block';
 			const percentage = (currentCharge / maxCharge) * 100;
 			powerBar.style.width = `${percentage}%`;
 		} else {
-			// When not charging, show the stored charge
 			if (storedCharge > 0) {
 				powerContainer.style.display = 'block';
 				const percentage = (storedCharge / maxCharge) * 100;
 				powerBar.style.width = `${percentage}%`;
 			} else {
-				// If no stored charge and not charging, hide
 				powerContainer.style.display = 'none';
 				powerBar.style.width = '0%';
 			}
@@ -361,14 +347,13 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				fireControl.classList.remove('hidden');
 				fireCheckbox.checked = false;
 				willFireAtEnd = false;
-				lastShotData = null; // Reset shot history for new turn
+				lastShotData = null; // Reset shot history
 			} else {
 				fireControl.classList.add('hidden');
 			}
 		},
 		// Returns the data of the last ghost shot fired
 		getLastShotData: () => {
-			// Only return data if the user actually wants to fire (checkbox checked)
 			return willFireAtEnd ? lastShotData : null;
 		},
 		// Executes a real fire event based on provided data (used in replay)
