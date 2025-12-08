@@ -21,7 +21,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	// --- Added: Player Cap (Direction Indicator) ---
 	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
 	cap.parent = playerVisual;
-	// Position slightly forward (Z) and up (Y) relative to player center
 	cap.position.set(0, 1.5, 0.6);
 	const capMat = new BABYLON.StandardMaterial('capMat', scene);
 	capMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.3); // Dark Blue
@@ -36,7 +35,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		scene
 	);
 	
-	// Lock rotation on the physics body so it doesn't tip over
 	playerAgg.body.setMassProperties({
 		inertia: new BABYLON.Vector3(0, 0, 0)
 	});
@@ -55,11 +53,54 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	
 	const speed = 8.0;
 	const jumpForce = 6.0;
-	const rotationSpeed = 0.05; // Speed for turning in FPS mode
+	const rotationSpeed = 0.05;
+	
+	// --- NEW: Turn System Variables ---
+	let isInputEnabled = true;
+	let turnStartPosition = new BABYLON.Vector3(0, 5, 0);
+	const maxTurnRadius = 15.0; // Fixed radius limit
+	
+	// Cinematic Move Variables
+	let isResolvingMove = false;
+	let resolveStartPos = new BABYLON.Vector3();
+	let resolveTargetPos = new BABYLON.Vector3();
+	let resolveStartTime = 0;
+	const resolveDuration = 5.0; // 5 seconds
+	let onResolveComplete = null;
 	
 	// --- Movement Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body) return;
+		
+		// --- NEW: Handle Cinematic Resolution Movement ---
+		if (isResolvingMove) {
+			const now = performance.now();
+			const elapsed = (now - resolveStartTime) / 1000;
+			const t = Math.min(elapsed / resolveDuration, 1.0);
+			
+			// Smooth Step interpolation
+			const smoothT = t * t * (3 - 2 * t);
+			
+			const newPos = BABYLON.Vector3.Lerp(resolveStartPos, resolveTargetPos, smoothT);
+			
+			// Move physics body kinematically to avoid physics issues
+			playerAgg.body.setTargetTransform(newPos, playerRoot.rotationQuaternion);
+			
+			if (t >= 1.0) {
+				isResolvingMove = false;
+				// Re-enable dynamics
+				playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
+				if (onResolveComplete) onResolveComplete();
+			}
+			return; // Skip standard input logic
+		}
+		
+		// Skip input if disabled
+		if (!isInputEnabled) {
+			// Dampen velocity to stop sliding
+			playerAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+			return;
+		}
 		
 		// Get active camera
 		const camera = cameraManager.getActiveCamera();
@@ -67,86 +108,71 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const isFirstPerson = (camera.name === 'firstPersonCam');
 		
 		// --- Visibility Logic ---
-		// Hide cap in First Person view to prevent blocking the camera
 		if (isFirstPerson) {
 			if (cap.isEnabled()) cap.setEnabled(false);
 		} else {
 			if (!cap.isEnabled()) cap.setEnabled(true);
 		}
 		
-		// --- CHANGED: Input Logic Separation ---
 		let moveDir = new BABYLON.Vector3(0, 0, 0);
 		
 		if (isFirstPerson) {
-			// --- First Person Logic ---
-			// A/D = Rotate Player (Yaw)
-			// Q/E = Strafe Left/Right
-			// W/S = Move Forward/Back
+			if (inputMap['a']) playerVisual.rotation.y -= rotationSpeed;
+			if (inputMap['d']) playerVisual.rotation.y += rotationSpeed;
 			
-			// 1. Handle Rotation
-			if (inputMap['a']) {
-				playerVisual.rotation.y -= rotationSpeed;
-			}
-			if (inputMap['d']) {
-				playerVisual.rotation.y += rotationSpeed;
-			}
-			
-			// 2. Handle Movement Vector
 			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
-			forward.y = 0;
-			forward.normalize();
-			
+			forward.y = 0; forward.normalize();
 			const right = playerVisual.getDirection(BABYLON.Vector3.Right());
-			right.y = 0;
-			right.normalize();
+			right.y = 0; right.normalize();
 			
-			// Forward/Back
-			let z = (inputMap['w']) ? 1 : 0;
-			z -= (inputMap['s']) ? 1 : 0;
-			
-			// Strafe (Q = Left, E = Right)
-			let x = (inputMap['e']) ? 1 : 0;
-			x -= (inputMap['q']) ? 1 : 0;
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['e']) ? 1 : 0; x -= (inputMap['q']) ? 1 : 0;
 			
 			moveDir = forward.scale(z).add(right.scale(x));
 		} else if (isFreeCam) {
-			// --- Free Cam Logic ---
-			// World Relative (W = North/Z+, D = East/X+)
-			let z = (inputMap['w']) ? 1 : 0;
-			z -= (inputMap['s']) ? 1 : 0;
-			let x = (inputMap['d']) ? 1 : 0;
-			x -= (inputMap['a']) ? 1 : 0;
-			
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
 			moveDir = new BABYLON.Vector3(x, 0, z);
 		} else {
-			// --- Follow Cam Logic (Standard) ---
-			// Camera Relative
-			let z = (inputMap['w']) ? 1 : 0;
-			z -= (inputMap['s']) ? 1 : 0;
-			let x = (inputMap['d']) ? 1 : 0;
-			x -= (inputMap['a']) ? 1 : 0;
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
 			
 			const camForward = camera.getDirection(BABYLON.Vector3.Forward());
-			camForward.y = 0;
-			camForward.normalize();
-			
+			camForward.y = 0; camForward.normalize();
 			const camRight = camera.getDirection(BABYLON.Vector3.Right());
-			camRight.y = 0;
-			camRight.normalize();
+			camRight.y = 0; camRight.normalize();
 			
 			moveDir = camForward.scale(z).add(camRight.scale(x));
 		}
 		
-		// Normalize movement vector
 		if (moveDir.length() > 0) {
 			moveDir.normalize();
 		}
 		
-		// Get current velocity to preserve Y (gravity)
 		const currentVel = new BABYLON.Vector3();
 		playerAgg.body.getLinearVelocityToRef(currentVel);
 		
 		const targetVelocity = moveDir.scale(speed);
+		
+		// --- NEW: Radius Constraint Logic ---
+		// Calculate where we would be
+		const nextPos = playerRoot.absolutePosition.add(targetVelocity.scale(scene.getEngine().getDeltaTime() / 1000));
+		const distFromStart = BABYLON.Vector3.Distance(
+			new BABYLON.Vector3(nextPos.x, 0, nextPos.z),
+			new BABYLON.Vector3(turnStartPosition.x, 0, turnStartPosition.z)
+		);
+		
+		// If trying to move outside radius, zero out velocity in that direction
+		if (distFromStart > maxTurnRadius) {
+			// Simple clamp: stop movement if moving away
+			// Vector from center to player
+			const toPlayer = nextPos.subtract(turnStartPosition);
+			// If dot product of velocity and toPlayer is positive, we are moving away
+			if (BABYLON.Vector3.Dot(targetVelocity, toPlayer) > 0) {
+				targetVelocity.x = 0;
+				targetVelocity.z = 0;
+			}
+		}
 		
 		// Jump Logic
 		const isJumping = inputMap[' '];
@@ -155,16 +181,12 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const isGrounded = hit.hit;
 		
 		let yVel = currentVel.y;
-		
 		if (isJumping && isGrounded) {
 			yVel = jumpForce;
 		}
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 		
-		// Visual Rotation (Only for Non-FPS modes)
-		// In FPS mode, we rotate manually via A/D above.
-		// In other modes, we rotate to face movement direction.
 		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
 			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
 			const currentRotation = playerVisual.rotation.y;
@@ -173,5 +195,35 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		}
 	});
 	
-	return { playerRoot, playerVisual };
+	// --- NEW: Exposed Methods for Turn Manager ---
+	return {
+		playerRoot,
+		playerVisual,
+		// Called when turn starts
+		startTurn: () => {
+			isInputEnabled = true;
+			turnStartPosition.copyFrom(playerRoot.absolutePosition);
+		},
+		// Called when turn ends (before resolution)
+		disableInput: () => {
+			isInputEnabled = false;
+		},
+		// Called to execute the cinematic move
+		resolveMovement: (targetPos, callback) => {
+			isResolvingMove = true;
+			onResolveComplete = callback;
+			
+			// 1. Reset to start position instantly
+			// We use setTargetTransform to teleport physics body
+			playerAgg.body.setTargetTransform(turnStartPosition, playerRoot.rotationQuaternion);
+			
+			// 2. Setup Lerp
+			resolveStartPos.copyFrom(turnStartPosition);
+			resolveTargetPos.copyFrom(targetPos);
+			resolveStartTime = performance.now();
+			
+			// Switch to Kinematic for smooth controlled movement
+			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
+		}
+	};
 };

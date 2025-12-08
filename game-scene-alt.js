@@ -63,6 +63,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	
 	// --- Bouncing Balls (Environment) ---
 	const ballCount = 10;
+	const ballAggregates = []; // Store physics bodies to control them later
+	
 	for (let i = 0; i < ballCount; i++) {
 		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
 		sphere.position.x = (Math.random() * 40) - 20;
@@ -77,11 +79,30 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		
 		shadowGenerator.addShadowCaster(sphere);
 		
-		new BABYLON.PhysicsAggregate(
+		const agg = new BABYLON.PhysicsAggregate(
 			sphere,
 			BABYLON.PhysicsShapeType.SPHERE,
 			{ mass: 1, restitution: 0.9, friction: 0.2 },
 			scene
 		);
+		ballAggregates.push(agg);
 	}
+	
+	// --- Control Function for Turn System ---
+	return {
+		setBallsFrozen: (isFrozen) => {
+			ballAggregates.forEach(agg => {
+				if (agg && agg.body) {
+					if (isFrozen) {
+						// Lock them in place
+						agg.body.setMotionType(BABYLON.PhysicsMotionType.STATIC);
+					} else {
+						// Unlock them
+						agg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
+						// Removed setActivationState as it is not available/needed in this Havok implementation
+					}
+				}
+			});
+		}
+	};
 };

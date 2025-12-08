@@ -61,6 +61,89 @@
 			background-color: #007bff;
 			border-color: #0056b3;
 		}
+		
+		/* --- Turn Based UI --- */
+		#turn-ui {
+			position: absolute;
+			top: 80px;
+			right: 20px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 15px;
+			z-index: 10;
+			pointer-events: auto;
+		}
+		
+		/* Spinner Timer */
+		.timer-spinner {
+			width: 60px;
+			height: 60px;
+			border-radius: 50%;
+			background: conic-gradient(#00ff00 0%, #333 0%);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-shadow: 0 0 10px rgba(0,0,0,0.5);
+			transition: background 0.1s linear;
+		}
+		
+		.timer-text {
+			font-family: sans-serif;
+			font-weight: bold;
+			color: white;
+			font-size: 18px;
+			background-color: #222;
+			width: 50px;
+			height: 50px;
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		
+		#btn-end-turn {
+			background-color: #dc3545;
+			color: white;
+			border: 2px solid #a71d2a;
+			padding: 10px 20px;
+			font-size: 16px;
+			font-weight: bold;
+			cursor: pointer;
+			border-radius: 5px;
+			font-family: sans-serif;
+		}
+		
+		#btn-end-turn:hover {
+			background-color: #c82333;
+		}
+		
+		#btn-end-turn:disabled {
+			background-color: #555;
+			border-color: #333;
+			cursor: not-allowed;
+		}
+		
+		/* Fire Checkbox */
+		#fire-control {
+			background-color: rgba(0, 0, 0, 0.7);
+			padding: 10px;
+			border-radius: 5px;
+			color: white;
+			font-family: sans-serif;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+		
+		#fire-control.hidden {
+			display: none;
+		}
+		
+		input[type=checkbox] {
+			transform: scale(1.5);
+			cursor: pointer;
+		}
 	</style>
 </head>
 <body>
@@ -71,6 +154,20 @@
 	<button class="cam-btn active" id="btn-follow">Follow</button>
 	<button class="cam-btn" id="btn-first">1st Person</button>
 	<button class="cam-btn" id="btn-free">Free</button>
+</div>
+
+<!-- Turn UI -->
+<div id="turn-ui">
+	<div class="timer-spinner" id="timer-spinner">
+		<div class="timer-text" id="timer-text">30</div>
+	</div>
+	
+	<div id="fire-control">
+		<input type="checkbox" id="chk-fire" />
+		<label for="chk-fire">Fire at Target</label>
+	</div>
+	
+	<button id="btn-end-turn">END TURN</button>
 </div>
 
 <div id="power-container">

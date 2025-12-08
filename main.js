@@ -19,6 +19,11 @@ const havokWasmUrl = './HavokPhysics.wasm';
 const canvas = document.getElementById('renderCanvas');
 const engine = new BABYLON.Engine(canvas, true);
 
+// --- UI Elements ---
+const timerSpinner = document.getElementById('timer-spinner');
+const timerText = document.getElementById('timer-text');
+const btnEndTurn = document.getElementById('btn-end-turn');
+
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
 	
@@ -33,46 +38,103 @@ const createScene = async function () {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// --- 1. Initialize Scene (Environment, Floor, Walls) ---
+	// --- 1. Initialize Scene ---
 	const { shadowGenerator } = initGameScene(scene);
 	
-	// --- 2. Initialize Alt Scene (Text, Random Balls) ---
-	await initGameSceneAlt(scene, shadowGenerator);
+	// --- 2. Initialize Alt Scene (Balls) ---
+	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator);
 	
-	// --- 3. Initialize Camera (Pre-init to pass manager, but needs player root later) ---
-	// We defer camera init slightly or pass a placeholder, but better to init player first.
-	// However, Player needs Camera for movement direction.
-	// Solution: Create a Camera Manager object that updates its internal reference.
-	// For this specific flow:
-	// 1. Create Camera Manager (creates cameras)
-	// 2. Create Player (uses camera for input)
-	// 3. Update Camera Manager with Player Target
+	// --- 3. Initialize Player & Camera ---
+	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
 	
-	// Let's do a slight adjustment: Create Player first, but pass a "Camera Provider" object.
-	// Actually, in game-player.js, we just need `cameraManager.getActiveCamera()`.
-	// So we can init Camera first, but we need Player Root for the Follow Camera target.
+	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef);
+	const { playerRoot, playerVisual } = playerManager;
 	
-	// Refined Order:
-	// 1. Create Player (Physics). It needs a way to get camera direction.
-	// 2. Create Camera. It needs Player Root to follow.
-	
-	// To solve the circular dependency:
-	// We will create the Player first. Inside Player, we won't access camera until Render Loop (which happens after everything is init).
-	// So we can pass a temporary object or just the future manager.
-	
-	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera }; // Temporary
-	
-	// --- 3. Initialize Player ---
-	const { playerRoot, playerVisual } = initGamePlayer(scene, shadowGenerator, cameraManagerRef);
-	
-	// --- 4. Initialize Camera System ---
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
-	
-	// Update the ref so Player loop uses the real manager
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	
-	// --- 5. Initialize Player Fire (Shooting) ---
-	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
+	// --- 4. Initialize Fire System ---
+	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
+	
+	// --- 5. Turn System Logic ---
+	const TURN_DURATION = 30;
+	let timeLeft = TURN_DURATION;
+	let timerInterval = null;
+	let isTurnPhase = false;
+	
+	const updateTimerUI = () => {
+		timerText.innerText = timeLeft;
+		const percentage = (timeLeft / TURN_DURATION) * 100;
+		// Update conic gradient
+		timerSpinner.style.background = `conic-gradient(#00ff00 ${percentage}%, #333 0%)`;
+		
+		if (timeLeft <= 5) {
+			timerSpinner.style.background = `conic-gradient(#ff0000 ${percentage}%, #333 0%)`;
+		}
+	};
+	
+	const startTurn = () => {
+		isTurnPhase = true;
+		timeLeft = TURN_DURATION;
+		updateTimerUI();
+		btnEndTurn.disabled = false;
+		
+		// 1. Freeze Balls
+		sceneAltManager.setBallsFrozen(true);
+		
+		// 2. Enable Player Input & Set Start Pos
+		playerManager.startTurn();
+		
+		// 3. Enable Fire UI
+		fireManager.setTurnActive(true);
+		
+		// 4. Start Timer
+		if (timerInterval) clearInterval(timerInterval);
+		timerInterval = setInterval(() => {
+			timeLeft--;
+			updateTimerUI();
+			
+			if (timeLeft <= 0) {
+				endTurn();
+			}
+		}, 1000);
+	};
+	
+	const endTurn = () => {
+		if (!isTurnPhase) return;
+		isTurnPhase = false;
+		clearInterval(timerInterval);
+		btnEndTurn.disabled = true;
+		
+		// 1. Disable Player Input
+		playerManager.disableInput();
+		
+		// 2. Hide Fire UI
+		fireManager.setTurnActive(false);
+		
+		// 3. Unfreeze Balls (Start moving again)
+		sceneAltManager.setBallsFrozen(false);
+		
+		// 4. Execute Fire (if queued)
+		// Prompt says: "user should fire the bullet before starting to move"
+		fireManager.executeTurnFire();
+		
+		// 5. Resolve Movement (Cinematic)
+		// Capture where the player ended up
+		const targetPos = playerRoot.absolutePosition.clone();
+		
+		// Reset and Animate
+		playerManager.resolveMovement(targetPos, () => {
+			// Callback when movement animation is done
+			// Start next turn
+			startTurn();
+		});
+	};
+	
+	btnEndTurn.addEventListener('click', endTurn);
+	
+	// Start the first turn
+	startTurn();
 	
 	return scene;
 };
