@@ -91,6 +91,17 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	// --- Control Function for Turn System ---
 	return {
 		setBallsFrozen: (isFrozen) => {
+			// 1. Cleanup: Remove any aggregates whose meshes have been disposed (destroyed)
+			// We iterate backwards to safely splice the array
+			for (let i = ballAggregates.length - 1; i >= 0; i--) {
+				const agg = ballAggregates[i];
+				// Check if aggregate is invalid, body is missing, or its mesh (transformNode) is disposed
+				if (!agg || !agg.body || !agg.transformNode || agg.transformNode.isDisposed()) {
+					ballAggregates.splice(i, 1);
+				}
+			}
+			
+			// 2. Apply State to remaining valid balls
 			ballAggregates.forEach(agg => {
 				if (agg && agg.body) {
 					if (isFrozen) {
@@ -99,7 +110,6 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 					} else {
 						// Unlock them
 						agg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
-						// Removed setActivationState as it is not available/needed in this Havok implementation
 					}
 				}
 			});
