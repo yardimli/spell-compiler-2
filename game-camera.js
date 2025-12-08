@@ -1,7 +1,7 @@
 import * as BABYLON from 'babylonjs';
 
 export const initGameCamera = (scene, canvas, playerRoot) => {
-	// Prevent context menu on right click for the canvas (needed for panning)
+	// Prevent context menu on right click for the canvas
 	canvas.oncontextmenu = (e) => { e.preventDefault(); };
 	
 	// 1. Follow Camera (Third Person)
@@ -12,19 +12,23 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	followCam.lowerRadiusLimit = 5;
 	followCam.upperRadiusLimit = 50;
 	
+	// --- CHANGED: Swap Mouse Controls for Follow Camera ---
+	// Goal: Left Click (0) = Pan, Right Click (2) = Rotate
+	followCam.panningMouseButton = 0; // Set Pan to Left Click
+	// Reassign button mapping: [Primary(Rotate), Secondary(Pan), Tertiary(Zoom)]
+	// We map Primary to Right(2) and Secondary to Left(0)
+	followCam.inputs.attached.pointers.buttons = [2, 0];
+	
 	// 2. First Person Camera
 	const firstPersonCam = new BABYLON.UniversalCamera('firstPersonCam', new BABYLON.Vector3(0, 0, 0), scene);
 	firstPersonCam.minZ = 0.1;
-	firstPersonCam.speed = 0; // Movement handled by player physics, this just looks
+	firstPersonCam.speed = 0; // Movement handled by player physics
 	firstPersonCam.angularSensibility = 2000;
 	
 	// 3. Free Camera (God Mode)
 	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 20, -30), scene);
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
-	// Detach default keys so we can handle specific logic if needed,
-	// but keeping them allows WASD movement of the camera itself.
-	// We will add custom mouse logic below.
 	
 	// Default active
 	scene.activeCamera = followCam;
@@ -42,11 +46,20 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			const headPos = playerRoot.position.clone();
 			headPos.y += 1.5; // Eye level
 			firstPersonCam.position = headPos;
+			
+			// --- CHANGED: Sync Camera Rotation with Player Rotation in FPS ---
+			// Since A/D now rotates the player mesh, the camera must follow that rotation.
+			// We find the player visual (child of root) to get the rotation.
+			const playerVisual = playerRoot.getChildren().find(m => m.name === 'playerVisual');
+			if (playerVisual) {
+				firstPersonCam.rotation.y = playerVisual.rotation.y;
+			}
 		}
 	});
 	
-	// --- Free Camera Custom Inputs (Zoom & Pan) ---
+	// --- Free Camera Custom Inputs (Look & Pan) ---
 	let isRightMouseDown = false;
+	let isLeftMouseDown = false;
 	let lastPointerX = 0;
 	let lastPointerY = 0;
 	
@@ -65,30 +78,39 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 				break;
 			}
 			case BABYLON.PointerEventTypes.POINTERDOWN:
+				lastPointerX = pointerInfo.event.clientX;
+				lastPointerY = pointerInfo.event.clientY;
 				if (pointerInfo.event.button === 2) { // Right Click
 					isRightMouseDown = true;
-					lastPointerX = pointerInfo.event.clientX;
-					lastPointerY = pointerInfo.event.clientY;
+				} else if (pointerInfo.event.button === 0) { // Left Click
+					isLeftMouseDown = true;
 				}
 				break;
 			case BABYLON.PointerEventTypes.POINTERUP:
 				if (pointerInfo.event.button === 2) {
 					isRightMouseDown = false;
+				} else if (pointerInfo.event.button === 0) {
+					isLeftMouseDown = false;
 				}
 				break;
 			case BABYLON.PointerEventTypes.POINTERMOVE:
+				const x = pointerInfo.event.clientX;
+				const y = pointerInfo.event.clientY;
+				const diffX = x - lastPointerX;
+				const diffY = y - lastPointerY;
+				
+				lastPointerX = x;
+				lastPointerY = y;
+				
+				// --- CHANGED: Right Click = Rotate (Look), Left Click = Pan ---
 				if (isRightMouseDown) {
-					const x = pointerInfo.event.clientX;
-					const y = pointerInfo.event.clientY;
-					const diffX = x - lastPointerX;
-					const diffY = y - lastPointerY;
-					
-					lastPointerX = x;
-					lastPointerY = y;
-					
+					// Rotate Camera (Look around)
+					const sensitivity = 0.002;
+					freeCam.rotation.y += diffX * sensitivity;
+					freeCam.rotation.x += diffY * sensitivity;
+				} else if (isLeftMouseDown) {
+					// Pan Camera
 					const panSensitivity = 0.05;
-					
-					// Calculate Panning Directions relative to Camera
 					const right = freeCam.getDirection(BABYLON.Vector3.Right());
 					const up = freeCam.getDirection(BABYLON.Vector3.Up());
 					

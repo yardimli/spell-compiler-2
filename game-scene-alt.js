@@ -39,8 +39,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		textMesh.position.z -= center.z;
 		textMesh.bakeCurrentTransformIntoVertices();
 		
-		textMesh.position.y = 2;
-		textMesh.position.x = -6;
+		textMesh.position.y = 12;
+		textMesh.position.x = 6;
+		textMesh.position.z = 16;
 		
 		const textAgg = new BABYLON.PhysicsAggregate(
 			textMesh,

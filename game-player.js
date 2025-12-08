@@ -55,6 +55,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	
 	const speed = 8.0;
 	const jumpForce = 6.0;
+	const rotationSpeed = 0.05; // Speed for turning in FPS mode
 	
 	// --- Movement Loop ---
 	scene.onBeforeRenderObservable.add(() => {
@@ -73,23 +74,58 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			if (!cap.isEnabled()) cap.setEnabled(true);
 		}
 		
-		// Calculate Input Direction
-		let z = (inputMap['w']) ? 1 : 0;
-		z -= (inputMap['s']) ? 1 : 0;
-		
-		let x = (inputMap['d']) ? 1 : 0;
-		x -= (inputMap['a']) ? 1 : 0;
-		
-		const isJumping = inputMap[' '];
-		
+		// --- CHANGED: Input Logic Separation ---
 		let moveDir = new BABYLON.Vector3(0, 0, 0);
 		
-		if (isFreeCam) {
-			// In Free Cam, movement is World Relative (W = North/Z+, D = East/X+)
-			// We do NOT use camera direction
+		if (isFirstPerson) {
+			// --- First Person Logic ---
+			// A/D = Rotate Player (Yaw)
+			// Q/E = Strafe Left/Right
+			// W/S = Move Forward/Back
+			
+			// 1. Handle Rotation
+			if (inputMap['a']) {
+				playerVisual.rotation.y -= rotationSpeed;
+			}
+			if (inputMap['d']) {
+				playerVisual.rotation.y += rotationSpeed;
+			}
+			
+			// 2. Handle Movement Vector
+			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
+			forward.y = 0;
+			forward.normalize();
+			
+			const right = playerVisual.getDirection(BABYLON.Vector3.Right());
+			right.y = 0;
+			right.normalize();
+			
+			// Forward/Back
+			let z = (inputMap['w']) ? 1 : 0;
+			z -= (inputMap['s']) ? 1 : 0;
+			
+			// Strafe (Q = Left, E = Right)
+			let x = (inputMap['e']) ? 1 : 0;
+			x -= (inputMap['q']) ? 1 : 0;
+			
+			moveDir = forward.scale(z).add(right.scale(x));
+		} else if (isFreeCam) {
+			// --- Free Cam Logic ---
+			// World Relative (W = North/Z+, D = East/X+)
+			let z = (inputMap['w']) ? 1 : 0;
+			z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['d']) ? 1 : 0;
+			x -= (inputMap['a']) ? 1 : 0;
+			
 			moveDir = new BABYLON.Vector3(x, 0, z);
 		} else {
-			// In Follow/First Person, movement is Camera Relative
+			// --- Follow Cam Logic (Standard) ---
+			// Camera Relative
+			let z = (inputMap['w']) ? 1 : 0;
+			z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['d']) ? 1 : 0;
+			x -= (inputMap['a']) ? 1 : 0;
+			
 			const camForward = camera.getDirection(BABYLON.Vector3.Forward());
 			camForward.y = 0;
 			camForward.normalize();
@@ -101,6 +137,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			moveDir = camForward.scale(z).add(camRight.scale(x));
 		}
 		
+		// Normalize movement vector
 		if (moveDir.length() > 0) {
 			moveDir.normalize();
 		}
@@ -112,6 +149,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const targetVelocity = moveDir.scale(speed);
 		
 		// Jump Logic
+		const isJumping = inputMap[' '];
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
 		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
 		const isGrounded = hit.hit;
@@ -124,9 +162,10 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 		
-		// Visual Rotation
-		// We rotate the visual mesh to face the movement direction
-		if (moveDir.lengthSquared() > 0.01) {
+		// Visual Rotation (Only for Non-FPS modes)
+		// In FPS mode, we rotate manually via A/D above.
+		// In other modes, we rotate to face movement direction.
+		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
 			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
 			const currentRotation = playerVisual.rotation.y;
 			const rotation = BABYLON.Scalar.LerpAngle(currentRotation, targetRotation, 0.2);
