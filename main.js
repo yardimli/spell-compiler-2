@@ -7,7 +7,7 @@ const earcut = Earcut.default || Earcut;
 window.earcut = earcut; // Global backup
 
 // 2. Havok WASM URL
-const havokWasmUrl = "./HavokPhysics.wasm";
+const havokWasmUrl = './HavokPhysics.wasm';
 
 const canvas = document.getElementById('renderCanvas');
 const engine = new BABYLON.Engine(canvas, true);
@@ -23,19 +23,23 @@ const createScene = async function () {
 		const hk = new BABYLON.HavokPlugin(true, havokInstance);
 		scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), hk);
 	} catch (e) {
-		console.error("Failed to initialize physics:", e);
+		console.error('Failed to initialize physics:', e);
 	}
 	
 	// --- Camera ---
-	const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 60, new BABYLON.Vector3(0, 0, 0), scene);
+	const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 2.5, 20, new BABYLON.Vector3(0, 0, 0), scene);
 	camera.attachControl(canvas, true);
 	camera.wheelPrecision = 50;
+	camera.lowerBetaLimit = 0.1;
+	camera.upperBetaLimit = (Math.PI / 2) - 0.1;
+	camera.lowerRadiusLimit = 5;
+	camera.upperRadiusLimit = 50;
 	
 	// --- Lights & Shadows ---
-	const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
+	const hemiLight = new BABYLON.HemisphericLight('hemiLight', new BABYLON.Vector3(0, 1, 0), scene);
 	hemiLight.intensity = 0.5;
 	
-	const pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0, 15, 0), scene);
+	const pointLight = new BABYLON.PointLight('pointLight', new BABYLON.Vector3(0, 15, 0), scene);
 	pointLight.intensity = 0.8;
 	
 	const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight);
@@ -43,7 +47,7 @@ const createScene = async function () {
 	shadowGenerator.blurKernel = 32;
 	
 	// --- Environment ---
-	const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData("./assets/environments/studio.env", scene);
+	const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData('./assets/environments/studio.env', scene);
 	scene.environmentTexture = envTexture;
 	scene.createDefaultSkybox(envTexture, true, 1000);
 	
@@ -53,41 +57,26 @@ const createScene = async function () {
 	const wallThickness = 2;
 	
 	// --- Texture Generation Functions ---
-	
-	/**
-	 * Creates the floor texture using an image and scales it based on tile size.
-	 * @param {BABYLON.Scene} scene
-	 * @param {number} tileSize - The size of one tile in world units.
-	 * @returns {BABYLON.Texture}
-	 */
 	const createFloorTexture = (scene, tileSize) => {
-		const texture = new BABYLON.Texture("./assets/game/floor.jpg", scene);
-		// Calculate UV scale: Mesh Size / Tile Size
+		const texture = new BABYLON.Texture('./assets/game/floor.jpg', scene);
 		texture.uScale = groundSize / tileSize;
 		texture.vScale = groundSize / tileSize;
 		return texture;
 	};
 	
-	/**
-	 * Creates the wall texture using an image.
-	 * Note: We do NOT scale the texture here anymore. We scale UVs on the mesh (faceUV).
-	 * @param {BABYLON.Scene} scene
-	 * @returns {BABYLON.Texture}
-	 */
 	const createWallTexture = (scene) => {
-		const texture = new BABYLON.Texture("./assets/game/walls.jpg", scene);
+		const texture = new BABYLON.Texture('./assets/game/walls.jpg', scene);
 		return texture;
 	};
 	
 	// --- Grid Surface (Floor) ---
-	const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: groundSize, height: groundSize, subdivisions: 100 }, scene);
+	const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: groundSize, height: groundSize, subdivisions: 100 }, scene);
 	ground.receiveShadows = true;
 	
-	// Create Floor Material
-	const floorTileSize = 5; // Variable to decide the size of each floor tile
+	const floorTileSize = 5;
 	const floorTexture = createFloorTexture(scene, floorTileSize);
 	
-	const groundMat = new BABYLON.StandardMaterial("groundMat", scene);
+	const groundMat = new BABYLON.StandardMaterial('groundMat', scene);
 	groundMat.diffuseTexture = floorTexture;
 	groundMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
 	groundMat.specularPower = 264;
@@ -102,43 +91,29 @@ const createScene = async function () {
 	);
 	
 	// --- Walls ---
-	// Create Wall Material
-	const wallTileSize = 10; // Variable to decide the size of each wall tile
-	const wallTexture = createWallTexture(scene); // Texture is 1x1 scale
+	const wallTileSize = 10;
+	const wallTexture = createWallTexture(scene);
 	
-	const wallMat = new BABYLON.StandardMaterial("wallMat", scene);
+	const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
 	wallMat.diffuseTexture = wallTexture;
 	wallMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
 	wallMat.specularPower = 264;
 	
-	// Calculate faceUVs to ensure texture tiles correctly on all sides (Front, Top, Side)
-	// We map the UVs so that 1 UV unit = 'wallTileSize' world units.
 	const faceUV = [];
-	// Indices: 0:Front, 1:Back, 2:Right, 3:Left, 4:Top, 5:Bottom
-	
-	// Front & Back (Size: groundSize x wallHeight)
 	faceUV[0] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
 	faceUV[1] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
-	
-	// Right & Left (Size: wallThickness x wallHeight)
 	faceUV[2] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
 	faceUV[3] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
-	
-	// Top & Bottom (Size: groundSize x wallThickness)
-	// Fix: Swapped U and V scaling because the default UV mapping for Top/Bottom faces
-	// aligns V with the X-axis (Width) and U with the Z-axis (Depth) in this context,
-	// causing the texture to stretch if not inverted.
 	faceUV[4] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
 	faceUV[5] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
 	
 	const wallOffset = groundSize / 2;
 	
-	// Configuration for the 4 walls.
 	const wallsConfig = [
-		{ x: 0, z: wallOffset, rotation: 0 },             // Top (North)
-		{ x: 0, z: -wallOffset, rotation: Math.PI },      // Bottom (South)
-		{ x: wallOffset, z: 0, rotation: -Math.PI / 2 },  // Right (East)
-		{ x: -wallOffset, z: 0, rotation: Math.PI / 2 }   // Left (West)
+		{ x: 0, z: wallOffset, rotation: 0 },
+		{ x: 0, z: -wallOffset, rotation: Math.PI },
+		{ x: wallOffset, z: 0, rotation: -Math.PI / 2 },
+		{ x: -wallOffset, z: 0, rotation: Math.PI / 2 }
 	];
 	
 	wallsConfig.forEach((config, index) => {
@@ -146,19 +121,15 @@ const createScene = async function () {
 			width: groundSize,
 			height: wallHeight,
 			depth: wallThickness,
-			faceUV: faceUV // Apply the calculated UVs
+			faceUV: faceUV
 		}, scene);
 		
-		// Position and Rotate
 		wall.position.set(config.x, wallHeight / 2, config.z);
 		wall.rotation.y = config.rotation;
-		
-		// Apply material
 		wall.material = wallMat;
 		wall.receiveShadows = true;
 		shadowGenerator.addShadowCaster(wall);
 		
-		// Physics
 		new BABYLON.PhysicsAggregate(
 			wall,
 			BABYLON.PhysicsShapeType.BOX,
@@ -168,19 +139,19 @@ const createScene = async function () {
 	});
 	
 	// --- 3D Text ---
-	const fontURL = "./assets/fonts/Kenney%20Future%20Regular.json";
+	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	
 	try {
 		const fontResponse = await fetch(fontURL);
 		const fontData = await fontResponse.json();
 		
 		if (!fontData || !fontData.boundingBox) {
-			throw new Error("Font data is missing boundingBox");
+			throw new Error('Font data is missing boundingBox');
 		}
 		
 		const textMesh = BABYLON.MeshBuilder.CreateText(
-			"text",
-			"Hello World",
+			'text',
+			'Hello World',
 			fontData,
 			{
 				size: 2,
@@ -190,7 +161,7 @@ const createScene = async function () {
 			scene
 		);
 		
-		const silverMat = new BABYLON.PBRMaterial("silver", scene);
+		const silverMat = new BABYLON.PBRMaterial('silver', scene);
 		silverMat.metallic = 1.0;
 		silverMat.roughness = 0.15;
 		silverMat.albedoColor = new BABYLON.Color3(0.9, 0.9, 0.9);
@@ -223,7 +194,7 @@ const createScene = async function () {
 			textAgg.body.setTargetTransform(textMesh.absolutePosition, textMesh.rotationQuaternion);
 		});
 	} catch (e) {
-		console.error("Failed to create 3D text:", e);
+		console.error('Failed to create 3D text:', e);
 	}
 	
 	// --- Bouncing Balls ---
@@ -245,10 +216,130 @@ const createScene = async function () {
 		new BABYLON.PhysicsAggregate(
 			sphere,
 			BABYLON.PhysicsShapeType.SPHERE,
-			{ mass: 1, restitution: 0.9, friction: 0.01 },
+			{ mass: 1, restitution: 0.9, friction: 0.2 },
 			scene
 		);
 	}
+	
+	// --- Player Character ---
+	const playerHeight = 4;
+	const playerRadius = 1;
+	
+	// 1. Player Root (Physics Body) - Invisible
+	// This mesh handles the physics collisions and movement.
+	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
+	playerRoot.position.set(0, 5, 0);
+	playerRoot.visibility = 0; // Hide the physics body
+	
+	// 2. Player Visual (Visible Mesh) - Child of Root
+	// This mesh handles the visual representation and rotation.
+	const playerVisual = BABYLON.MeshBuilder.CreateCapsule('playerVisual', { height: playerHeight, radius: playerRadius }, scene);
+	playerVisual.parent = playerRoot; // Attach to root
+	
+	const playerMat = new BABYLON.StandardMaterial('playerMat', scene);
+	playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0);
+	playerVisual.material = playerMat;
+	shadowGenerator.addShadowCaster(playerVisual);
+	
+	// 3. Physics Aggregate on Root
+	const playerAgg = new BABYLON.PhysicsAggregate(
+		playerRoot,
+		BABYLON.PhysicsShapeType.CAPSULE,
+		{ mass: 1, friction: 0, restitution: 0 },
+		scene
+	);
+	
+	// Lock rotation on the physics body so it doesn't tip over
+	playerAgg.body.setMassProperties({
+		inertia: new BABYLON.Vector3(0, 0, 0)
+	});
+	
+	// --- Player Controls ---
+	const inputMap = {};
+	scene.onKeyboardObservable.add((kbInfo) => {
+		const type = kbInfo.type;
+		const key = kbInfo.event.key.toLowerCase();
+		if (type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+			inputMap[key] = true;
+		} else if (type === BABYLON.KeyboardEventTypes.KEYUP) {
+			inputMap[key] = false;
+		}
+	});
+	
+	const speed = 8.0;
+	const jumpForce = 6.0;
+	
+	// --- Game Loop / Character Update ---
+	scene.onBeforeRenderObservable.add(() => {
+		if (!playerAgg.body) return;
+		
+		// 1. Camera Follow Logic
+		// Target the playerRoot position
+		const targetPos = playerRoot.position.clone();
+		targetPos.y += 1.0;
+		camera.setTarget(BABYLON.Vector3.Lerp(camera.getTarget(), targetPos, 0.1));
+		
+		// 2. Calculate Input Direction
+		let z = (inputMap['w'] || inputMap['arrowup']) ? 1 : 0;
+		z -= (inputMap['s'] || inputMap['arrowdown']) ? 1 : 0;
+		
+		let x = (inputMap['d'] || inputMap['arrowright']) ? 1 : 0;
+		x -= (inputMap['a'] || inputMap['arrowleft']) ? 1 : 0;
+		
+		const isJumping = inputMap[' '];
+		
+		// 3. Movement Logic
+		// Get camera forward direction (projected on XZ plane)
+		const camForward = camera.getDirection(BABYLON.Vector3.Forward());
+		camForward.y = 0;
+		camForward.normalize();
+		
+		const camRight = camera.getDirection(BABYLON.Vector3.Right());
+		camRight.y = 0;
+		camRight.normalize();
+		
+		// Calculate move vector based on inputs relative to camera
+		const moveDir = camForward.scale(z).add(camRight.scale(x));
+		
+		if (moveDir.length() > 0) {
+			moveDir.normalize();
+		}
+		
+		// Get current velocity to preserve Y (gravity)
+		const currentVel = new BABYLON.Vector3();
+		playerAgg.body.getLinearVelocityToRef(currentVel);
+		
+		// Apply movement velocity (X and Z), preserve Y
+		const targetVelocity = moveDir.scale(speed);
+		
+		// Jump Logic
+		// Raycast down to check if grounded
+		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
+		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
+		const isGrounded = hit.hit;
+		
+		let yVel = currentVel.y;
+		
+		if (isJumping && isGrounded) {
+			yVel = jumpForce;
+		}
+		
+		// Set the new velocity to the physics body
+		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
+		
+		// 4. Visual Rotation
+		// Rotate the visual mesh to face movement direction
+		if (moveDir.lengthSquared() > 0.01) {
+			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+			
+			// Smooth rotation for the visual mesh only
+			const currentRotation = playerVisual.rotation.y;
+			// Helper to interpolate angles correctly (handling 0 -> 360 wrap)
+			const rotation = BABYLON.Scalar.LerpAngle(currentRotation, targetRotation, 0.2);
+			
+			playerVisual.rotation.y = rotation;
+		}
+	});
 	
 	return scene;
 };
@@ -259,6 +350,6 @@ createScene().then(scene => {
 	});
 });
 
-window.addEventListener("resize", function () {
+window.addEventListener('resize', function () {
 	engine.resize();
 });

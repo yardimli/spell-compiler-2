@@ -1,7 +1,8 @@
 #TODO
 
-- add player character
-- add player movement controls
-- add 1st person/3rd person camera toggle
+- add player character ..................................................................DONE
+- player should interact with balls and floor and walls. ................................DONE
+- add player movement controls (WASD or arrow keys) and space for jump ..................DONE
 - allow player to throw balls with space key, longer press = farther throw, show power meter
 - make balls become smaller over time and then disappear
+- add 1st person/3rd person camera toggle add button on top right of ui
