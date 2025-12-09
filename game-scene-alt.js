@@ -1,8 +1,9 @@
 import * as BABYLON from 'babylonjs';
 import { initGameSceneAltRecording } from './game-scene-alt-recording';
 import { initGameSceneAltPlayback } from './game-scene-alt-playback';
+
 export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) => {
-// --- 3D Text ---
+	// --- 3D Text ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	try {
 		const fontResponse = await fetch(fontURL);
@@ -45,17 +46,18 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 	} catch (e) {
 		console.error('Failed to create 3D text:', e);
 	}
-
-// --- Enemy Logic (Ghosts) ---
-	const enemies = [];
-	const enemySpeed = 4.0;
-
-// Helper to create Ghost Visuals
+	
+	// --- Ghost Logic (Ghosts) ---
+	const ghosts = [];
+	const ghostSpeed = 4.0;
+	// --- CHANGED: Define diameter here to ensure Physics matches Visuals ---
+	const ghostDiameter = 4.2;
+	const ghostRadius = ghostDiameter / 2;
+	
+	// Helper to create Ghost Visuals
 	const createGhostMesh = (name, color, position) => {
 		const root = new BABYLON.TransformNode(name + 'Root', scene);
 		root.position = position;
-		
-		const ghostDiameter = 4.2;
 		
 		// Head
 		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', { diameter: ghostDiameter, segments: 16 }, scene);
@@ -100,30 +102,32 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 		
 		return root;
 	};
-
-// Enemy Definitions
-// Use positions from map if available, otherwise fallback
+	
+	// Ghost Definitions
 	const getPos = (key, defaultVec) => {
 		return (startPositions && startPositions[key]) ? startPositions[key] : defaultVec;
 	};
 	
-	const enemyTypes = [
+	const ghostTypes = [
 		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: getPos('A', new BABYLON.Vector3(0, 2, 2)) },
 		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: getPos('B', new BABYLON.Vector3(-3, 2, 0)) },
 		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: getPos('C', new BABYLON.Vector3(3, 2, 0)) },
 		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: getPos('D', new BABYLON.Vector3(0, 2, -2)) }
 	];
-
-// --- NEW: Callback for player caught ---
+	
 	let onPlayerCaughtCallback = null;
 	
-	enemyTypes.forEach((def) => {
+	ghostTypes.forEach((def) => {
 		const visual = createGhostMesh(def.name, def.color, def.startPos);
 		
+		// Physics: Friction 0 to slide, Restitution 0 to stop dead on impact
+		// --- CHANGED: Added explicit radius to match visual diameter ---
+		// Since 'visual' is a TransformNode, PhysicsAggregate cannot infer the size correctly from geometry.
+		// We must provide the radius explicitly to prevent the collider from defaulting to a smaller size (causing intersection).
 		const agg = new BABYLON.PhysicsAggregate(
 			visual,
 			BABYLON.PhysicsShapeType.SPHERE,
-			{ mass: 10, restitution: 0, friction: 0 },
+			{ mass: 10, restitution: 0, friction: 0, radius: ghostRadius },
 			scene
 		);
 		
@@ -141,103 +145,126 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 		];
 		let currentDir = directions[Math.floor(Math.random() * directions.length)];
 		
-		const enemyData = {
+		const ghostData = {
 			mesh: visual,
 			agg: agg,
 			currentDir: currentDir,
 			name: def.name,
 			isFrozen: false,
-			turnCooldown: 0
+			turnCooldown: 0,
+			stuckFrames: 0 // Counter to detect if physically stuck
 		};
 		
-		// --- Collision Logic ---
+		// --- Collision Logic (Gameplay Events Only) ---
+		// We rely on physics for the actual "stop", but we use this to detect Player catch
 		agg.body.setCollisionCallbackEnabled(true);
 		agg.body.getCollisionObservable().add((event) => {
-			if (enemyData.isFrozen) return;
+			if (ghostData.isFrozen) return;
 			
 			const other = event.collidedAgainst.transformNode;
 			if (!other) return;
-			console.log(`${enemyData.name} collided with ${other.name}`);
+			
 			if (other.name.includes('player')) {
-				console.log(`${enemyData.name} caught the player!`);
+				console.log(`${ghostData.name} caught the player!`);
 				if (onPlayerCaughtCallback) {
-					console.log('Calling onPlayerCaughtCallback');
 					onPlayerCaughtCallback();
 				}
-				enemyData.currentDir = enemyData.currentDir.scale(-1);
+				// Bounce back slightly on catch
+				ghostData.currentDir = ghostData.currentDir.scale(-1);
 			}
 		});
 		
-		enemies.push(enemyData);
+		ghosts.push(ghostData);
 	});
-
-// --- AI Loop ---
+	
+	// --- AI Loop ---
 	scene.onBeforeRenderObservable.add(() => {
-		enemies.forEach(enemy => {
-			if (enemy.isFrozen || !enemy.agg.body) return;
+		ghosts.forEach(ghost => {
+			if (ghost.isFrozen || !ghost.agg.body) return;
 			
-			if (enemy.turnCooldown > 0) {
-				enemy.turnCooldown--;
+			if (ghost.turnCooldown > 0) {
+				ghost.turnCooldown--;
 			}
 			
-			const transform = enemy.mesh;
+			const transform = ghost.mesh;
 			const origin = transform.absolutePosition.clone();
 			
 			// Vectors
-			const forward = enemy.currentDir.clone();
+			const forward = ghost.currentDir.clone();
 			const up = new BABYLON.Vector3(0, 1, 0);
 			const right = BABYLON.Vector3.Cross(up, forward);
 			const left = right.scale(-1);
 			
-			// Raycasts
-			const rayLength = 3.5; // Increased for larger tiles
-			const scanLength = 4.5;
+			// --- Raycast Setup ---
+			// We ONLY use raycasts to detect wall openings (structure).
+			// We do NOT use them to detect other ghosts (physics handles that).
+			const rayLength = 4.0;
+			const rayLeft = new BABYLON.Ray(origin, left, rayLength);
+			const rayRight = new BABYLON.Ray(origin, right, rayLength);
 			
-			const rayForward = new BABYLON.Ray(origin, forward, rayLength);
-			const rayLeft = new BABYLON.Ray(origin, left, scanLength);
-			const rayRight = new BABYLON.Ray(origin, right, scanLength);
+			const predicate = (m) => m.name.includes('wall');
 			
-			// Check Walls
-			const hitForward = scene.pickWithRay(rayForward, (m) => m.name.includes('wall'));
-			const hitLeft = scene.pickWithRay(rayLeft, (m) => m.name.includes('wall'));
-			const hitRight = scene.pickWithRay(rayRight, (m) => m.name.includes('wall'));
+			const hitLeft = scene.pickWithRay(rayLeft, predicate);
+			const hitRight = scene.pickWithRay(rayRight, predicate);
 			
-			// --- AI Decision Making ---
+			// --- Velocity Check (Stuck Detection) ---
+			const currentVel = new BABYLON.Vector3();
+			ghost.agg.body.getLinearVelocityToRef(currentVel);
+			const speed = Math.sqrt(currentVel.x * currentVel.x + currentVel.z * currentVel.z);
 			
-			// 1. Collision: Must Turn
-			if (hitForward.hit) {
-				const possibleDirs = [];
-				if (!hitLeft.hit) possibleDirs.push(left);
-				if (!hitRight.hit) possibleDirs.push(right);
-				
-				if (possibleDirs.length === 0) {
-					possibleDirs.push(forward.scale(-1));
-				}
-				
-				enemy.currentDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
-				enemy.turnCooldown = 20;
+			// If we are supposed to be moving but speed is near zero, we hit a wall or another ghost.
+			if (speed < 0.5) {
+				ghost.stuckFrames++;
+			} else {
+				ghost.stuckFrames = 0;
 			}
-			// 2. Open Space: Prefer to turn into openings
-			else if (enemy.turnCooldown === 0) {
+			
+			// --- Decision Making ---
+			
+			// 1. Physically Stuck (Hit Wall or Ghost)
+			if (ghost.stuckFrames > 5) {
+				// We hit something solid. We MUST pick a new direction.
+				const possibleDirs = [];
+				
+				// Check Left
+				if (!hitLeft.hit) possibleDirs.push(left);
+				// Check Right
+				if (!hitRight.hit) possibleDirs.push(right);
+				// Check Back (Reverse) - always an option if trapped
+				possibleDirs.push(forward.scale(-1));
+				
+				// Pick a random valid direction
+				ghost.currentDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+				
+				// Reset stuck counter and add cooldown so we don't spin instantly
+				ghost.stuckFrames = 0;
+				ghost.turnCooldown = 20;
+			}
+			// 2. Moving Freely (Check for Junctions)
+			else if (ghost.turnCooldown === 0) {
+				// We are moving fine, but let's see if there is an opening to turn
 				const openOptions = [];
 				if (!hitLeft.hit) openOptions.push(left);
 				if (!hitRight.hit) openOptions.push(right);
 				
 				if (openOptions.length > 0) {
-					if (Math.random() < 0.1) {
-						enemy.currentDir = openOptions[Math.floor(Math.random() * openOptions.length)];
-						enemy.turnCooldown = 60;
+					// 15% chance to take a turn if available (Pac-Man ghost behavior)
+					if (Math.random() < 0.15) {
+						ghost.currentDir = openOptions[Math.floor(Math.random() * openOptions.length)];
+						ghost.turnCooldown = 45; // Don't turn again immediately
 					}
 				}
 			}
 			
-			// Apply Velocity
-			const velocity = enemy.currentDir.scale(enemySpeed);
-			enemy.agg.body.setLinearVelocity(new BABYLON.Vector3(velocity.x, -0.1, velocity.z));
+			// --- Apply Movement ---
+			// Always apply velocity in the chosen direction.
+			// If we hit a wall, Havok will stop the mesh, 'speed' will drop, and 'stuckFrames' will trigger a turn.
+			const velocity = ghost.currentDir.scale(ghostSpeed);
+			ghost.agg.body.setLinearVelocity(new BABYLON.Vector3(velocity.x, -0.1, velocity.z));
 			
 			// Visual Rotation
-			if (enemy.currentDir.lengthSquared() > 0.1) {
-				const targetAngle = Math.atan2(enemy.currentDir.x, enemy.currentDir.z);
+			if (ghost.currentDir.lengthSquared() > 0.1) {
+				const targetAngle = Math.atan2(ghost.currentDir.x, ghost.currentDir.z);
 				transform.rotation.y = BABYLON.Scalar.LerpAngle(transform.rotation.y, targetAngle, 0.2);
 			}
 		});
@@ -249,13 +276,11 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 	return {
 		setBallsFrozen: (isFrozen) => {
 			if (isFrozen) {
-				recordingModule.freezeEnemies(enemies);
+				recordingModule.freezeGhosts(ghosts);
 			} else {
-				playbackModule.unfreezeEnemies(enemies);
+				playbackModule.unfreezeGhosts(ghosts);
 			}
 		},
-		// --- NEW: Setter for callback ---
 		setOnPlayerCaught: (cb) => { onPlayerCaughtCallback = cb; }
 	};
-	
 };

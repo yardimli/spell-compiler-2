@@ -36,7 +36,7 @@ const createScene = async function () {
 // 1. Scene (Maze) - Returns gems and start positions
 	const {shadowGenerator, gems, startPositions} = initGameScene(scene);
 
-// 2. Enemies (Replaces Alt Scene) - Pass start positions
+// 2. Ghosts (Replaces Alt Scene) - Pass start positions
 	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator, startPositions);
 
 // 3. Player & Camera - Pass start position for Player (P)
@@ -112,7 +112,7 @@ const createScene = async function () {
 	});
 
 // 6. Turn Logic
-	const TURN_DURATION = 30;
+	const TURN_DURATION = 15;
 	let timeLeft = TURN_DURATION;
 	let timerInterval = null;
 	let isTurnPhase = false;
@@ -130,7 +130,7 @@ const createScene = async function () {
 		updateTimerUI();
 		btnEndTurn.disabled = false;
 		
-		// Freeze enemies during planning phase
+		// Freeze ghosts during planning phase
 		sceneAltManager.setBallsFrozen(true);
 		playerManager.startTurn();
 		fireManager.setTurnActive(true);
@@ -162,7 +162,7 @@ const createScene = async function () {
 			},
 			// On Replay Start (Rewind Complete)
 			() => {
-				// Unfreeze enemies during action phase
+				// Unfreeze ghosts during action phase
 				sceneAltManager.setBallsFrozen(false);
 			},
 			// On Complete

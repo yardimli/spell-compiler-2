@@ -49,7 +49,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVe
 		jumpForce: 6.0,
 		rotationSpeed: 0.05,
 		playerHeight,
-		MAX_RECORDING_TIME: 5.0,
+		MAX_RECORDING_TIME: 10.0,
 		FIRE_COST: 0.5
 	};
 
