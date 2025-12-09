@@ -1,7 +1,7 @@
 import * as BABYLON from 'babylonjs';
 
 export const initGameScene = (scene) => {
-// --- Lights & Shadows ---
+	// --- Lights & Shadows ---
 	const hemiLight = new BABYLON.HemisphericLight('hemiLight', new BABYLON.Vector3(0, 1, 0), scene);
 	hemiLight.intensity = 0.5;
 	
@@ -11,21 +11,21 @@ export const initGameScene = (scene) => {
 	const shadowGenerator = new BABYLON.ShadowGenerator(1024, pointLight);
 	shadowGenerator.useBlurExponentialShadowMap = true;
 	shadowGenerator.blurKernel = 32;
-
-// --- Environment ---
+	
+	// --- Environment ---
 	const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData('./assets/environments/sanGiuseppeBridge.env', scene);
 	scene.environmentTexture = envTexture;
 	scene.createDefaultSkybox(envTexture, true, 1000);
-
-// --- Constants ---
+	
+	// --- Constants ---
 	const groundSize = 80;
 	const wallHeight = 4;
-
-// --- Wall Configuration ---
+	
+	// --- Wall Configuration ---
 	const tileSize = 3;
 	const wallThickness = 1;
-
-// --- Texture Generation Functions ---
+	
+	// --- Texture Generation Functions ---
 	const createFloorTexture = (scene, tileSize) => {
 		const texture = new BABYLON.Texture('./assets/game/floor.jpg', scene);
 		texture.uScale = groundSize / tileSize;
@@ -37,8 +37,8 @@ export const initGameScene = (scene) => {
 		const texture = new BABYLON.Texture('./assets/game/walls.jpg', scene);
 		return texture;
 	};
-
-// --- Grid Surface (Floor) ---
+	
+	// --- Grid Surface (Floor) ---
 	const ground = BABYLON.MeshBuilder.CreateGround('ground', {
 		width: groundSize,
 		height: groundSize,
@@ -53,17 +53,17 @@ export const initGameScene = (scene) => {
 	groundMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
 	groundMat.specularPower = 264;
 	ground.material = groundMat;
-
-// --- Physics: Ground ---
+	
+	// --- Physics: Ground ---
 	new BABYLON.PhysicsAggregate(
 		ground,
 		BABYLON.PhysicsShapeType.BOX,
-		{mass: 0, restitution: 0.5},
+		{ mass: 0, restitution: 0.5 },
 		scene
 	);
-
-// --- Maze Generation ---
-// 1 = Wall, 0 = Path, Strings = Start Positions
+	
+	// --- Maze Generation ---
+	// 1 = Wall, 0 = Path, Strings = Start Positions
 	const mazeMap = [
 		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // Row 0
 		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 1
@@ -97,11 +97,11 @@ export const initGameScene = (scene) => {
 	const cols = mazeMap[0].length;
 	const startX = -(cols * tileSize) / 2 + tileSize / 2;
 	const startZ = (rows * tileSize) / 2 - tileSize / 2;
-
-// --- Start Positions Container ---
+	
+	// --- Start Positions Container ---
 	const startPositions = {};
-
-// --- Helper to create a physics wall segment ---
+	
+	// --- Helper to create a physics wall segment ---
 	const createWallSegment = (name, width, depth, position) => {
 		const wall = BABYLON.MeshBuilder.CreateBox(name, {
 			width: width,
@@ -117,19 +117,19 @@ export const initGameScene = (scene) => {
 		new BABYLON.PhysicsAggregate(
 			wall,
 			BABYLON.PhysicsShapeType.BOX,
-			{mass: 0, restitution: 0.1, friction: 0.0},
+			{ mass: 0, restitution: 0.1, friction: 0.0 },
 			scene
 		);
 	};
-
-// --- Floor Markers Helper ---
+	
+	// --- Floor Markers Helper ---
 	const createMarker = (text, position, color) => {
-		const plane = BABYLON.MeshBuilder.CreatePlane('marker_' + text, {size: 2}, scene);
+		const plane = BABYLON.MeshBuilder.CreatePlane('marker_' + text, { size: 2 }, scene);
 		plane.position = position.clone();
 		plane.position.y = 0.05; // Slightly above ground
 		plane.rotation.x = Math.PI / 2;
 		
-		const dt = new BABYLON.DynamicTexture('dt_' + text, {width: 128, height: 128}, scene);
+		const dt = new BABYLON.DynamicTexture('dt_' + text, { width: 128, height: 128 }, scene);
 		dt.hasAlpha = true;
 		const ctx = dt.getContext();
 		ctx.font = 'bold 80px Arial';
@@ -154,19 +154,19 @@ export const initGameScene = (scene) => {
 		'D': '#FFB852',   // Clyde
 		'P': '#00FF00'    // Player
 	};
-
-// --- Spawn Gems ---
+	
+	// --- Spawn Gems ---
 	const gems = [];
 	const gemMat = new BABYLON.StandardMaterial('gemMat', scene);
 	gemMat.diffuseColor = new BABYLON.Color3(1, 0.84, 0); // Gold
 	gemMat.emissiveColor = new BABYLON.Color3(0.5, 0.4, 0);
-
-// Define Ghost Pen area (Rows 9-11, Cols ~6-14) to exclude gems
+	
+	// Define Ghost Pen area (Rows 9-11, Cols ~6-14) to exclude gems
 	const isGhostPen = (r, c) => {
 		return (r >= 9 && r <= 11 && c >= 6 && c <= 14);
 	};
-
-// --- Logic: Joints, Links, and Parsing ---
+	
+	// --- Logic: Joints, Links, and Parsing ---
 	for (let r = 0; r < rows; r++) {
 		for (let c = 0; c < cols; c++) {
 			const cell = mazeMap[r][c];
@@ -216,7 +216,7 @@ export const initGameScene = (scene) => {
 			if ((cell === 0 || typeof cell === 'string') && !isGhostPen(r, c)) {
 				// Don't spawn gem on Player start
 				if (cell !== 'P') {
-					const gem = BABYLON.MeshBuilder.CreateSphere(`gem_${r}_${c}`, {diameter: 0.8}, scene);
+					const gem = BABYLON.MeshBuilder.CreateSphere(`gem_${r}_${c}`, { diameter: 0.8 }, scene);
 					gem.position = new BABYLON.Vector3(posX, 1.0, posZ);
 					gem.material = gemMat;
 					
@@ -231,6 +231,19 @@ export const initGameScene = (scene) => {
 		}
 	}
 	
-	return {shadowGenerator, groundSize, gems, startPositions};
-	
+	// NEW: Return grid configuration so ghosts can navigate
+	return {
+		shadowGenerator,
+		groundSize,
+		gems,
+		startPositions,
+		gridConfig: {
+			mazeMap,
+			tileSize,
+			startX,
+			startZ,
+			rows,
+			cols
+		}
+	};
 };

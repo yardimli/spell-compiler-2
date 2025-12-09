@@ -21,6 +21,7 @@ const btnEndTurn = document.getElementById('btn-end-turn');
 // Stats UI
 const scoreDisplay = document.getElementById('score-display');
 const livesDisplay = document.getElementById('lives-display');
+
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
 	
@@ -33,11 +34,11 @@ const createScene = async function () {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// 1. Scene (Maze) - Returns gems and start positions
-	const { shadowGenerator, gems, startPositions } = initGameScene(scene);
+	// 1. Scene (Maze) - Returns gems, start positions, and grid config
+	const { shadowGenerator, gems, startPositions, gridConfig } = initGameScene(scene);
 	
-	// 2. Ghosts (Replaces Alt Scene) - Pass start positions
-	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator, startPositions);
+	// 2. Ghosts (Replaces Alt Scene) - Pass start positions AND grid config
+	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator, startPositions, gridConfig);
 	
 	// 3. Player & Camera - Pass start position for Player (P)
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
