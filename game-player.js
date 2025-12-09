@@ -1,22 +1,22 @@
 import * as BABYLON from 'babylonjs';
 import { initGamePlayerRecording } from './game-player-recording';
 import { initGamePlayerPlayback } from './game-player-playback';
-
-export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
-	const playerHeight = 4;
-	// Corridor width is ~5.5 (Tile 6 - Wall 0.5).
-	// Player Diameter 2.8. Two players = 5.6. They cannot pass.
-	const playerRadius = 1.4;
+export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVector) => {
+	const playerHeight = 8;
+	const playerRadius = 2.2;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
+
+// Use provided start position or default
+	const startPosition = startPosVector ? startPosVector.clone() : new BABYLON.Vector3(0, 1.5, -12);
+// Ensure height is correct
+	startPosition.y = 1.5;
 	
-	// Spawning at Z = -12 (2 tiles down from center) to avoid immediate collision with ghosts
-	const startPosition = new BABYLON.Vector3(0, 1.5, -12);
 	playerRoot.position.copyFrom(startPosition);
 	playerRoot.visibility = 0;
-	
-	// 2. Player Visual (Visible Mesh) - Child of Root
+
+// 2. Player Visual (Visible Mesh) - Child of Root
 	const playerVisual = BABYLON.MeshBuilder.CreateCapsule('playerVisual', { height: playerHeight, radius: playerRadius }, scene);
 	playerVisual.parent = playerRoot;
 	
@@ -24,8 +24,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0);
 	playerVisual.material = playerMat;
 	shadowGenerator.addShadowCaster(playerVisual);
-	
-	// Direction Indicator
+
+// Direction Indicator
 	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
 	cap.parent = playerVisual;
 	cap.position.set(0, 1.5, playerRadius - 0.2);
@@ -33,8 +33,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	capMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.3);
 	cap.material = capMat;
 	shadowGenerator.addShadowCaster(cap);
-	
-	// 3. Physics
+
+// 3. Physics
 	const playerAgg = new BABYLON.PhysicsAggregate(
 		playerRoot,
 		BABYLON.PhysicsShapeType.CAPSULE,
@@ -42,8 +42,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		scene
 	);
 	playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(0, 0, 0) });
-	
-	// --- Configuration ---
+
+// --- Configuration ---
 	const config = {
 		speed: 8.0,
 		jumpForce: 6.0,
@@ -52,15 +52,15 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		MAX_RECORDING_TIME: 5.0,
 		FIRE_COST: 0.5
 	};
-	
-	// --- Initialize Sub-Modules ---
+
+// --- Initialize Sub-Modules ---
 	const recordingModule = initGamePlayerRecording(scene, playerRoot, playerVisual, playerAgg, cameraManager, config);
 	const playbackModule = initGamePlayerPlayback(scene, playerRoot, playerVisual, playerAgg, playerMat);
-	
-	// --- Win Condition Callback ---
+
+// --- Win Condition Callback ---
 	let onWinCallback = null;
-	
-	// --- Main Loop ---
+
+// --- Main Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		const state = playbackModule.getState();
 		
@@ -81,8 +81,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			}
 		}
 	});
-	
-	// --- Public API ---
+
+// --- Public API ---
 	return {
 		playerRoot,
 		playerVisual,

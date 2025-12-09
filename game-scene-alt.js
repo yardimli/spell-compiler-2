@@ -1,9 +1,8 @@
 import * as BABYLON from 'babylonjs';
 import { initGameSceneAltRecording } from './game-scene-alt-recording';
 import { initGameSceneAltPlayback } from './game-scene-alt-playback';
-
-export const initGameSceneAlt = async (scene, shadowGenerator) => {
-	// --- 3D Text ---
+export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) => {
+// --- 3D Text ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	try {
 		const fontResponse = await fetch(fontURL);
@@ -46,17 +45,17 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	} catch (e) {
 		console.error('Failed to create 3D text:', e);
 	}
-	
-	// --- Enemy Logic (Ghosts) ---
+
+// --- Enemy Logic (Ghosts) ---
 	const enemies = [];
 	const enemySpeed = 4.0;
-	
-	// Helper to create Ghost Visuals
+
+// Helper to create Ghost Visuals
 	const createGhostMesh = (name, color, position) => {
 		const root = new BABYLON.TransformNode(name + 'Root', scene);
 		root.position = position;
 		
-		const ghostDiameter = 2.8;
+		const ghostDiameter = 4.2;
 		
 		// Head
 		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', { diameter: ghostDiameter, segments: 16 }, scene);
@@ -101,17 +100,21 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		
 		return root;
 	};
+
+// Enemy Definitions
+// Use positions from map if available, otherwise fallback
+	const getPos = (key, defaultVec) => {
+		return (startPositions && startPositions[key]) ? startPositions[key] : defaultVec;
+	};
 	
-	// Enemy Definitions
-	// TileSize is 6. Center is (0,0).
 	const enemyTypes = [
-		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: new BABYLON.Vector3(0, 2, 2) },
-		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: new BABYLON.Vector3(-3, 2, 0) },
-		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: new BABYLON.Vector3(3, 2, 0) },
-		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: new BABYLON.Vector3(0, 2, -2) }
+		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: getPos('A', new BABYLON.Vector3(0, 2, 2)) },
+		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: getPos('B', new BABYLON.Vector3(-3, 2, 0)) },
+		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: getPos('C', new BABYLON.Vector3(3, 2, 0)) },
+		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: getPos('D', new BABYLON.Vector3(0, 2, -2)) }
 	];
-	
-	// --- NEW: Callback for player caught ---
+
+// --- NEW: Callback for player caught ---
 	let onPlayerCaughtCallback = null;
 	
 	enemyTypes.forEach((def) => {
@@ -154,21 +157,21 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 			
 			const other = event.collidedAgainst.transformNode;
 			if (!other) return;
-			
-			if (other.name.includes('player') || other.name.includes('Root')) {
-				// --- CHANGED: Trigger Game Over / Life Loss instead of bounce ---
+			console.log(`${enemyData.name} collided with ${other.name}`);
+			if (other.name.includes('player')) {
+				console.log(`${enemyData.name} caught the player!`);
 				if (onPlayerCaughtCallback) {
+					console.log('Calling onPlayerCaughtCallback');
 					onPlayerCaughtCallback();
 				}
-				// Bounce slightly to prevent sticking while resetting
 				enemyData.currentDir = enemyData.currentDir.scale(-1);
 			}
 		});
 		
 		enemies.push(enemyData);
 	});
-	
-	// --- AI Loop ---
+
+// --- AI Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		enemies.forEach(enemy => {
 			if (enemy.isFrozen || !enemy.agg.body) return;
@@ -254,4 +257,5 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		// --- NEW: Setter for callback ---
 		setOnPlayerCaught: (cb) => { onPlayerCaughtCallback = cb; }
 	};
+	
 };
