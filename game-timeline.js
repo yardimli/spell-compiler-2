@@ -18,9 +18,7 @@ export const initGameTimeline = (playerManager) => {
 			const el = document.createElement('div');
 			el.className = `timeline-item type-${wp.type.toLowerCase()}`;
 			
-			// --- NEW: Store the original waypoint index ---
-			// This is crucial because we skip some waypoints (zero duration),
-			// so the DOM index won't match the Replay index.
+			// Store the original waypoint index
 			el.dataset.index = index;
 			
 			if (index === activeIndex) {
@@ -65,6 +63,10 @@ export const initGameTimeline = (playerManager) => {
 				delBtn.onclick = (e) => {
 					e.stopPropagation();
 					playerManager.removeWaypoint(index + 1);
+					
+					// --- NEW: Focus back to game canvas ---
+					const canvas = document.getElementById('renderCanvas');
+					if (canvas) canvas.focus();
 				};
 				el.appendChild(delBtn);
 			}
@@ -82,9 +84,7 @@ export const initGameTimeline = (playerManager) => {
 		updateProgress: (activeIndex, progress = 0) => {
 			const items = container.querySelectorAll('.timeline-item');
 			items.forEach((item) => {
-				// --- CHANGED: Use dataset index for comparison ---
-				// We compare the stored waypoint index with the current active index
-				// instead of using the loop index 'i'.
+				// Use dataset index for comparison
 				const itemIndex = parseInt(item.dataset.index);
 				const fill = item.querySelector('.progress-fill');
 				

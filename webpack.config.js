@@ -13,23 +13,29 @@ module.exports = {
 		extensions: ['.js']
 	},
 	module: {
-		rules: []
+		// LEAVE THIS EMPTY or only keep rules for things that are NOT CSS/HTML
+		rules: [
+			// Do NOT put a css-loader or style-loader rule here.
+			// Do NOT put an html-loader rule here.
+		]
 	},
 	plugins: [
-		// Injects bundle.js into index.html
 		new HtmlWebpackPlugin({
 			template: './index.html',
-			inject: 'body'
+			inject: 'body' // Injects only the bundle.js script
 		}),
 		new CopyWebpackPlugin({
 			patterns: [
-				// Copy the assets folder (fonts, environments)
+				// 1. Copy the assets folder
 				{ from: 'assets', to: 'assets' },
-				// Copy Havok WASM from node_modules to the root of dist
+				// 2. Copy Havok WASM
 				{
 					from: 'node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm',
 					to: 'HavokPhysics.wasm'
-				}
+				},
+				// 3. COPY YOUR CSS FILE AS-IS
+				// This takes index.css from your root and puts a copy in dist/
+				{ from: 'index.css', to: 'index.css' }
 			]
 		})
 	],
