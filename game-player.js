@@ -4,11 +4,16 @@ import { initGamePlayerPlayback } from './game-player-playback';
 
 export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const playerHeight = 4;
-	const playerRadius = 1;
+	// Corridor width is ~5.5 (Tile 6 - Wall 0.5).
+	// Player Diameter 2.8. Two players = 5.6. They cannot pass.
+	const playerRadius = 1.4;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
-	playerRoot.position.set(0, 5, 0);
+	
+	// --- CHANGED: Move player spawn out of the central ghost pen ---
+	// Spawning at Z = -12 (2 tiles down from center) to avoid immediate collision with ghosts
+	playerRoot.position.set(0, 5, -12);
 	playerRoot.visibility = 0;
 	
 	// 2. Player Visual (Visible Mesh) - Child of Root
@@ -23,7 +28,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	// Direction Indicator
 	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
 	cap.parent = playerVisual;
-	cap.position.set(0, 1.5, 0.6);
+	cap.position.set(0, 1.5, playerRadius - 0.2);
 	const capMat = new BABYLON.StandardMaterial('capMat', scene);
 	capMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.3);
 	cap.material = capMat;

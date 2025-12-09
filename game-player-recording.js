@@ -41,7 +41,7 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 		const wp = {
 			type: type,
 			position: playerRoot.absolutePosition.clone(),
-			rotation: playerVisual.rotation.y,
+			rotation: playerVisual.rotation.y, // Records current rotation
 			timestamp: recordedTime,
 			duration: 0,
 			...data
@@ -105,8 +105,9 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 		let moveDir = new BABYLON.Vector3(0, 0, 0);
 		let hasInput = false;
 		
-		// Direction Calculation
+		// --- CHANGED: Rotation & Movement Logic ---
 		if (isFirstPerson) {
+			// First Person: A/D Rotate, W/S Move Forward/Back, Q/E Strafe
 			if (inputMap['a']) playerVisual.rotation.y -= rotationSpeed;
 			if (inputMap['d']) playerVisual.rotation.y += rotationSpeed;
 			
@@ -117,20 +118,40 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 			
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
 			let x = (inputMap['e']) ? 1 : 0; x -= (inputMap['q']) ? 1 : 0;
+			
+			// Check rotation input for recording
+			if (inputMap['a'] || inputMap['d']) hasInput = true;
+			
 			moveDir = forward.scale(z).add(right.scale(x));
 			if (z !== 0 || x !== 0) hasInput = true;
 		} else {
-			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
-			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
+			// Third Person: Tank Controls
+			// A/D Rotates the player
+			// W/S Moves player Forward/Backward relative to facing
 			
-			if (z !== 0 || x !== 0) {
+			// 1. Handle Rotation
+			let rotInput = 0;
+			if (inputMap['d']) rotInput += 1;
+			if (inputMap['a']) rotInput -= 1;
+			
+			if (rotInput !== 0) {
+				playerVisual.rotation.y += rotInput * rotationSpeed;
 				hasInput = true;
-				const camForward = camera.getDirection(BABYLON.Vector3.Forward());
-				camForward.y = 0; camForward.normalize();
-				const camRight = camera.getDirection(BABYLON.Vector3.Right());
-				camRight.y = 0; camRight.normalize();
-				moveDir = camForward.scale(z).add(camRight.scale(x));
 			}
+			
+			// 2. Handle Movement (Relative to Player Facing)
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			
+			if (z !== 0) {
+				hasInput = true;
+				const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
+				forward.y = 0;
+				forward.normalize();
+				moveDir = forward.scale(z);
+			}
+			
+			// Note: We removed the auto-rotate logic (Math.atan2) here.
+			// The player now only rotates via A/D keys or explicit targeting (handled in fire module).
 		}
 		
 		const isJumping = inputMap[' '];
@@ -156,16 +177,13 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 		
-		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
-			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
-			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 0.2);
-		}
-		
 		// Waypoint Logic
 		if (hasInput) {
 			isMoving = true;
 		} else {
 			if (isMoving) {
+				// Stop recording block when input stops
+				// This captures the final rotation and position after the move/turn
 				if (currentVel.length() < 0.5) {
 					isMoving = false;
 					addWaypoint('MOVE');

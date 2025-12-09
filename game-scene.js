@@ -18,12 +18,12 @@ export const initGameScene = (scene) => {
 	scene.createDefaultSkybox(envTexture, true, 1000);
 	
 	// --- Constants ---
-	const groundSize = 60;
+	const groundSize = 80; // Increased ground size to accommodate larger maze
 	const wallHeight = 4;
 	
 	// --- Wall Configuration ---
-	const tileSize = 4;       // Distance between grid centers
-	const wallThickness = 0.5; // Thin walls
+	const tileSize = 3; // Distance between grid centers
+	const wallThickness = 1; // Thin walls
 	
 	// --- Texture Generation Functions ---
 	const createFloorTexture = (scene, tileSize) => {
@@ -60,20 +60,30 @@ export const initGameScene = (scene) => {
 	
 	// --- Maze Generation ---
 	// 1 = Wall, 0 = Path
+	// --- CHANGED: Added 2 layers of outer walls (padding) ---
 	const mazeMap = [
-		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
-		[1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
-		[1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
-		[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
-		[1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1],
-		[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
-		[1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
-		[1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
-		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
-		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // Row 0: Top Border
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 1: Top Path
+		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 2: Top Blocks
+		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 3: Top Blocks (Thick)
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 4: Horizontal Path
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 5: T-Junctions & L-Shapes
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 6: Path
+		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 7: Walls curving in
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 8: Path around Center
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 9: Ghost House Top (Door in middle)
+		[1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1], // Row 10: Ghost House Inside
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 11: Ghost House Bottom
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 12: Path
+		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 13: Walls curving out
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 14: Horizontal Path
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 15: Lower T-Junctions
+		[1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1], // Row 16: Lower Path Split
+		[1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1], // Row 17: Bottom L-Shapes
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 18: Path
+		[1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1], // Row 19: Bottom Blocks
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 20: Bottom Path
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  // Row 21: Bottom Border
 	];
 	
 	const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
@@ -115,7 +125,6 @@ export const initGameScene = (scene) => {
 				const posY = wallHeight / 2;
 				
 				// 1. Create the "Joint"
-				// Renamed to include 'wall_' so AI raycast detects it
 				createWallSegment(
 					`wall_joint_${r}_${c}`,
 					wallThickness,

@@ -56,13 +56,15 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		const root = new BABYLON.TransformNode(name + 'Root', scene);
 		root.position = position;
 		
+		const ghostDiameter = 2.8;
+		
 		// Head
-		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', { diameter: 1.5, segments: 16 }, scene);
+		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', { diameter: ghostDiameter, segments: 16 }, scene);
 		head.position.y = 0.5;
 		head.parent = root;
 		
 		// Skirt
-		const skirt = BABYLON.MeshBuilder.CreateCylinder(name + 'Skirt', { height: 0.8, diameter: 1.5 }, scene);
+		const skirt = BABYLON.MeshBuilder.CreateCylinder(name + 'Skirt', { height: 0.8, diameter: ghostDiameter }, scene);
 		skirt.position.y = 0;
 		skirt.parent = root;
 		
@@ -80,19 +82,19 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		eyePupil.diffuseColor = BABYLON.Color3.Blue();
 		
 		const createEye = (x) => {
-			const eye = BABYLON.MeshBuilder.CreateSphere('eye', { diameter: 0.4 }, scene);
+			const eye = BABYLON.MeshBuilder.CreateSphere('eye', { diameter: 0.6 }, scene);
 			eye.material = eyeWhite;
-			eye.position.set(x, 0.6, 0.6);
+			eye.position.set(x, 0.8, 1.0);
 			eye.parent = root;
 			
-			const pupil = BABYLON.MeshBuilder.CreateSphere('pupil', { diameter: 0.2 }, scene);
+			const pupil = BABYLON.MeshBuilder.CreateSphere('pupil', { diameter: 0.3 }, scene);
 			pupil.material = eyePupil;
-			pupil.position.set(0, 0, 0.15);
+			pupil.position.set(0, 0, 0.25);
 			pupil.parent = eye;
 		};
 		
-		createEye(-0.3);
-		createEye(0.3);
+		createEye(-0.6);
+		createEye(0.6);
 		
 		shadowGenerator.addShadowCaster(head);
 		shadowGenerator.addShadowCaster(skirt);
@@ -101,11 +103,13 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	};
 	
 	// Enemy Definitions
+	// --- CHANGED: Spread out spawn positions to prevent overlap with larger bodies ---
+	// TileSize is 6. Center is (0,0).
 	const enemyTypes = [
-		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: new BABYLON.Vector3(-8, 2, -8) },
-		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: new BABYLON.Vector3(8, 2, -8) },
-		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: new BABYLON.Vector3(-8, 2, 8) },
-		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: new BABYLON.Vector3(8, 2, 8) }
+		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: new BABYLON.Vector3(0, 2, 2) },
+		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: new BABYLON.Vector3(-3, 2, 0) },
+		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: new BABYLON.Vector3(3, 2, 0) },
+		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: new BABYLON.Vector3(0, 2, -2) }
 	];
 	
 	enemyTypes.forEach((def) => {
@@ -137,7 +141,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 			agg: agg,
 			currentDir: currentDir,
 			name: def.name,
-			isFrozen: false
+			isFrozen: false,
+			turnCooldown: 0
 		};
 		
 		// --- Collision Logic ---
@@ -161,43 +166,66 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		enemies.forEach(enemy => {
 			if (enemy.isFrozen || !enemy.agg.body) return;
 			
+			if (enemy.turnCooldown > 0) {
+				enemy.turnCooldown--;
+			}
+			
 			const transform = enemy.mesh;
 			const origin = transform.absolutePosition.clone();
 			
-			// Increased ray length to 2.2 to detect thin walls earlier
-			// (Tile center to wall center is 2.0)
-			const rayLength = 2.2;
-			const ray = new BABYLON.Ray(origin, enemy.currentDir, rayLength);
+			// Vectors
+			const forward = enemy.currentDir.clone();
+			const up = new BABYLON.Vector3(0, 1, 0);
+			const right = BABYLON.Vector3.Cross(up, forward);
+			const left = right.scale(-1);
 			
-			// Filter: Look for meshes with 'wall' in the name
-			const hit = scene.pickWithRay(ray, (mesh) => {
-				return mesh.name.includes('wall');
-			});
+			// Raycasts
+			const rayLength = 3.5; // Increased for larger tiles
+			const scanLength = 4.5;
 			
-			if (hit.hit) {
-				const possibleDirs = [
-					new BABYLON.Vector3(0, 0, 1),
-					new BABYLON.Vector3(0, 0, -1),
-					new BABYLON.Vector3(1, 0, 0),
-					new BABYLON.Vector3(-1, 0, 0)
-				];
+			const rayForward = new BABYLON.Ray(origin, forward, rayLength);
+			const rayLeft = new BABYLON.Ray(origin, left, scanLength);
+			const rayRight = new BABYLON.Ray(origin, right, scanLength);
+			
+			// Check Walls
+			const hitForward = scene.pickWithRay(rayForward, (m) => m.name.includes('wall'));
+			const hitLeft = scene.pickWithRay(rayLeft, (m) => m.name.includes('wall'));
+			const hitRight = scene.pickWithRay(rayRight, (m) => m.name.includes('wall'));
+			
+			// --- AI Decision Making ---
+			
+			// 1. Collision: Must Turn
+			if (hitForward.hit) {
+				const possibleDirs = [];
+				if (!hitLeft.hit) possibleDirs.push(left);
+				if (!hitRight.hit) possibleDirs.push(right);
 				
-				const validDirs = possibleDirs.filter(d => {
-					const checkRay = new BABYLON.Ray(origin, d, rayLength);
-					const checkHit = scene.pickWithRay(checkRay, (m) => m.name.includes('wall'));
-					return !checkHit.hit;
-				});
+				if (possibleDirs.length === 0) {
+					possibleDirs.push(forward.scale(-1));
+				}
 				
-				if (validDirs.length > 0) {
-					enemy.currentDir = validDirs[Math.floor(Math.random() * validDirs.length)];
-				} else {
-					enemy.currentDir = enemy.currentDir.scale(-1);
+				enemy.currentDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+				enemy.turnCooldown = 20;
+			}
+			// 2. Open Space: Prefer to turn into openings
+			else if (enemy.turnCooldown === 0) {
+				const openOptions = [];
+				if (!hitLeft.hit) openOptions.push(left);
+				if (!hitRight.hit) openOptions.push(right);
+				
+				if (openOptions.length > 0) {
+					if (Math.random() < 0.1) {
+						enemy.currentDir = openOptions[Math.floor(Math.random() * openOptions.length)];
+						enemy.turnCooldown = 60;
+					}
 				}
 			}
 			
+			// Apply Velocity
 			const velocity = enemy.currentDir.scale(enemySpeed);
 			enemy.agg.body.setLinearVelocity(new BABYLON.Vector3(velocity.x, -0.1, velocity.z));
 			
+			// Visual Rotation
 			if (enemy.currentDir.lengthSquared() > 0.1) {
 				const targetAngle = Math.atan2(enemy.currentDir.x, enemy.currentDir.z);
 				transform.rotation.y = BABYLON.Scalar.LerpAngle(transform.rotation.y, targetAngle, 0.2);
