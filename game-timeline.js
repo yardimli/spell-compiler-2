@@ -11,21 +11,30 @@ export const initGameTimeline = (playerManager) => {
 			
 			const duration = wp.duration || 0;
 			
-			// --- NEW: Skip zero-duration blocks (transitions) ---
+			// Skip zero-duration blocks (transitions)
 			// This prevents rendering invisible slivers for instant transitions
 			if (duration < 0.01) return;
 			
 			const el = document.createElement('div');
 			el.className = `timeline-item type-${wp.type.toLowerCase()}`;
 			
+			// --- NEW: Store the original waypoint index ---
+			// This is crucial because we skip some waypoints (zero duration),
+			// so the DOM index won't match the Replay index.
+			el.dataset.index = index;
+			
 			if (index === activeIndex) {
 				el.classList.add('active');
 			}
 			
-			// --- CHANGED: Strict Proportional Width ---
+			// Progress Fill Element
+			const fill = document.createElement('div');
+			fill.className = 'progress-fill';
+			el.appendChild(fill);
+			
+			// Strict Proportional Width
 			const percent = (duration / MAX_DURATION) * 100;
 			el.style.width = `${percent}%`;
-			// Removed flex-grow to ensure empty space remains empty
 			
 			// Title
 			const title = document.createElement('span');
@@ -70,11 +79,28 @@ export const initGameTimeline = (playerManager) => {
 	});
 	
 	return {
-		updateProgress: (index) => {
+		updateProgress: (activeIndex, progress = 0) => {
 			const items = container.querySelectorAll('.timeline-item');
-			items.forEach((item, i) => {
-				if (i === index) item.classList.add('active');
-				else item.classList.remove('active');
+			items.forEach((item) => {
+				// --- CHANGED: Use dataset index for comparison ---
+				// We compare the stored waypoint index with the current active index
+				// instead of using the loop index 'i'.
+				const itemIndex = parseInt(item.dataset.index);
+				const fill = item.querySelector('.progress-fill');
+				
+				if (itemIndex < activeIndex) {
+					// Completed items
+					item.classList.remove('active');
+					if (fill) fill.style.width = '100%';
+				} else if (itemIndex === activeIndex) {
+					// Current item
+					item.classList.add('active');
+					if (fill) fill.style.width = `${progress * 100}%`;
+				} else {
+					// Future items
+					item.classList.remove('active');
+					if (fill) fill.style.width = '0%';
+				}
 			});
 		}
 	};

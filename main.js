@@ -108,8 +108,9 @@ const createScene = async function () {
 				startTurn();
 			},
 			// On Progress (Update Timeline UI)
-			(index) => {
-				timelineManager.updateProgress(index);
+			// --- CHANGED: Accept progress value ---
+			(index, progress) => {
+				timelineManager.updateProgress(index, progress);
 			}
 		);
 	};

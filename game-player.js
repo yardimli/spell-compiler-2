@@ -309,7 +309,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		replayState.startRot = currentWp.rotation;
 		replayState.segmentDuration = Math.max(currentWp.duration, 0.01);
 		
-		if (replayState.onProgress) replayState.onProgress(index);
+		// --- CHANGED: Pass 0 progress at start of segment ---
+		if (replayState.onProgress) replayState.onProgress(index, 0);
 		
 		replayState.isFiring = (nextWp.type === 'FIRE');
 	};
@@ -318,6 +319,11 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const now = performance.now();
 		const elapsed = (now - replayState.startTime) / 1000;
 		const t = Math.min(elapsed / replayState.segmentDuration, 1.0);
+		
+		// --- NEW: Update Progress continuously ---
+		if (replayState.onProgress) {
+			replayState.onProgress(replayState.currentIndex, t);
+		}
 		
 		const currentWp = waypoints[replayState.currentIndex];
 		const nextWp = waypoints[replayState.currentIndex + 1];
