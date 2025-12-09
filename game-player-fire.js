@@ -33,7 +33,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, { mass: 0.2, restitution: 0.5 }, scene);
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
 			fragAgg.body.applyImpulse(dir.scale(5 + Math.random() * 5), frag.absolutePosition);
-			setTimeout(() => { frag.dispose(); fragAgg.dispose(); }, 1500);
+			setTimeout(() => {
+				frag.dispose();
+				fragAgg.dispose();
+			}, 1500);
 		}
 		
 		scene.meshes.forEach((mesh) => {
@@ -47,6 +50,15 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		});
 	};
 	
+	// --- Helper: Face Target ---
+	// Rotates the player visual to look at the specific target mesh
+	const faceTarget = (target) => {
+		if (!target || target.isDisposed()) return;
+		const dir = target.absolutePosition.subtract(playerVisual.absolutePosition);
+		const angle = Math.atan2(dir.x, dir.z);
+		playerVisual.rotation.y = angle;
+	};
+	
 	// --- Target Management ---
 	const getVisibleTargets = () => {
 		const camera = cameraManager.getActiveCamera();
@@ -55,7 +67,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	const cycleTarget = () => {
 		const visibleTargets = getVisibleTargets();
-		if (visibleTargets.length === 0) { setTarget(null); return; }
+		if (visibleTargets.length === 0) {
+			setTarget(null);
+			return;
+		}
 		visibleTargets.sort((a, b) => a.name.localeCompare(b.name));
 		let nextIndex = 0;
 		if (currentTarget) {
@@ -63,6 +78,9 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			if (currentIndex !== -1) nextIndex = (currentIndex + 1) % visibleTargets.length;
 		}
 		setTarget(visibleTargets[nextIndex]);
+		
+		// --- CHANGED: Rotate player to face the selected target ---
+		faceTarget(currentTarget);
 	};
 	
 	const setTarget = (mesh) => {
@@ -71,7 +89,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		if (currentTarget) highlightLayer.addMesh(currentTarget, targetColor);
 	};
 	
-	// Input
+	// --- Input: Keyboard ---
 	const inputMap = {};
 	scene.onKeyboardObservable.add((kbInfo) => {
 		const type = kbInfo.type;
@@ -85,6 +103,28 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				currentCharge = 0;
 			}
 			if (key === 'c' && isTurnActive) cycleTarget();
+		}
+	});
+	
+	// --- Input: Mouse Click Selection ---
+	scene.onPointerObservable.add((pointerInfo) => {
+		// Only allow selection if turn is active
+		if (!isTurnActive) return;
+		
+		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+			// Check for Left Click (0)
+			if (pointerInfo.event.button === 0) {
+				const pickInfo = pointerInfo.pickInfo;
+				if (pickInfo && pickInfo.hit && pickInfo.pickedMesh) {
+					const mesh = pickInfo.pickedMesh;
+					// Check if the clicked mesh is a target sphere
+					if (mesh.name.startsWith('sphere')) {
+						setTarget(mesh);
+						// --- CHANGED: Rotate player to face the clicked target ---
+						faceTarget(mesh);
+					}
+				}
+			}
 		}
 	});
 	
