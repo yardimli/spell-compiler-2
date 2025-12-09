@@ -1,10 +1,14 @@
 export const initGameTimeline = (playerManager) => {
 	const container = document.getElementById('timeline-container');
+	const MAX_DURATION = 5.0; // Total recording time
 	
 	const render = (waypoints, activeIndex = -1) => {
 		container.innerHTML = '';
 		
 		waypoints.forEach((wp, index) => {
+			// Skip the very last waypoint for rendering blocks
+			if (index === waypoints.length - 1) return;
+			
 			const el = document.createElement('div');
 			el.className = `timeline-item type-${wp.type.toLowerCase()}`;
 			
@@ -12,32 +16,41 @@ export const initGameTimeline = (playerManager) => {
 				el.classList.add('active');
 			}
 			
+			// --- CHANGED: Strict Proportional Width ---
+			const duration = wp.duration || 0;
+			const percent = (duration / MAX_DURATION) * 100;
+			el.style.width = `${percent}%`;
+			// Removed flex-grow to ensure empty space remains empty
+			
 			// Title
 			const title = document.createElement('span');
-			title.innerText = wp.type === 'MOVE' ? 'MOVE' : 'FIRE';
+			if (wp.type === 'MOVE') title.innerText = 'MV';
+			else if (wp.type === 'FIRE') title.innerText = 'FR';
+			else if (wp.type === 'WAIT') title.innerText = 'WT';
+			else title.innerText = wp.type;
 			el.appendChild(title);
 			
-			// Info (Power for shots)
+			// Info
 			if (wp.type === 'FIRE') {
 				const info = document.createElement('span');
 				info.className = 'timeline-info';
-				info.innerText = `Pow: ${Math.round(wp.power)}`;
+				info.innerText = `${Math.round(wp.power)}`;
 				el.appendChild(info);
 			} else {
 				const info = document.createElement('span');
 				info.className = 'timeline-info';
-				info.innerText = `#${index}`;
+				info.innerText = `${duration.toFixed(1)}s`;
 				el.appendChild(info);
 			}
 			
-			// Delete Button (Don't allow deleting the start point index 0)
-			if (index > 0) {
+			// Delete Button (Only on last segment)
+			if (index === waypoints.length - 2) {
 				const delBtn = document.createElement('div');
 				delBtn.className = 'delete-btn';
 				delBtn.innerText = 'X';
 				delBtn.onclick = (e) => {
 					e.stopPropagation();
-					playerManager.removeWaypoint(index);
+					playerManager.removeWaypoint(index + 1);
 				};
 				el.appendChild(delBtn);
 			}

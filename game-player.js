@@ -53,17 +53,20 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const rotationSpeed = 0.05;
 	
 	// --- Waypoint System ---
-	// Structure: { type: 'MOVE'|'FIRE', position: Vector3, rotation: float, power?: number, target?: Mesh }
 	let waypoints = [];
 	const onWaypointsChanged = new BABYLON.Observable();
 	
 	let isInputEnabled = true;
-	let isMoving = false; // Track if we are currently processing movement input
+	let isMoving = false;
+	
+	// --- Time Recording ---
+	let recordedTime = 0;
+	const MAX_RECORDING_TIME = 5.0;
+	const FIRE_COST = 0.5; // Time cost for firing
 	
 	// --- Replay State ---
 	let animationState = 'NONE'; // 'NONE', 'REWIND', 'REPLAY'
 	
-	// Rewind: Simple lerp back to start
 	let rewindState = {
 		startPos: new BABYLON.Vector3(),
 		startRot: 0,
@@ -74,37 +77,65 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		onComplete: null
 	};
 	
-	// Replay: Complex waypoint traversal
 	let replayState = {
 		currentIndex: 0,
 		startTime: 0,
-		startPos: new BABYLON.Vector3(), // Position at start of current segment
-		startRot: 0, // Rotation at start of current segment
+		startPos: new BABYLON.Vector3(),
+		startRot: 0,
 		segmentDuration: 0,
-		isFiring: false, // Flag if we are in the "wait for fire" pause
+		isFiring: false,
 		fireCallback: null,
 		onComplete: null,
-		onProgress: null // Update UI
+		onProgress: null
 	};
-	
-	const MOVEMENT_SPEED_REPLAY = 10.0; // Units per second
 	
 	// --- Helper: Add Waypoint ---
 	const addWaypoint = (type, data = {}) => {
+		// --- CHANGED: Apply cost for actions ---
+		if (type === 'FIRE') {
+			recordedTime += FIRE_COST;
+			if (recordedTime > MAX_RECORDING_TIME) recordedTime = MAX_RECORDING_TIME;
+		}
+		
+		// Calculate duration of the *previous* segment
+		if (waypoints.length > 0) {
+			const lastWp = waypoints[waypoints.length - 1];
+			// Duration is the difference between current recorded time and previous timestamp
+			// Note: If we just stood still, recordedTime didn't change, so duration is 0 (correct)
+			lastWp.duration = recordedTime - lastWp.timestamp;
+		}
+		
 		const wp = {
 			type: type,
 			position: playerRoot.absolutePosition.clone(),
 			rotation: playerVisual.rotation.y,
+			timestamp: recordedTime,
+			duration: 0, // Will be filled by next waypoint
 			...data
 		};
+		
 		waypoints.push(wp);
 		onWaypointsChanged.notifyObservers(waypoints);
 	};
 	
-	// --- Helper: Remove Waypoint ---
+	// --- Helper: Remove Waypoint (Undo) ---
 	const removeWaypoint = (index) => {
-		if (index <= 0 || index >= waypoints.length) return; // Cannot remove start point
+		if (index <= 0 || index !== waypoints.length - 1) return;
+		
 		waypoints.splice(index, 1);
+		const newLastWp = waypoints[waypoints.length - 1];
+		
+		// Reset State to Previous Block
+		recordedTime = newLastWp.timestamp;
+		
+		playerAgg.body.setTargetTransform(newLastWp.position, playerRoot.rotationQuaternion);
+		playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
+		playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
+		playerVisual.rotation.y = newLastWp.rotation;
+		
+		newLastWp.duration = 0;
+		isInputEnabled = true;
+		
 		onWaypointsChanged.notifyObservers(waypoints);
 	};
 	
@@ -126,14 +157,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			
 			if (t >= 1.0) {
 				animationState = 'REPLAY';
-				// --- FIX START: Reset Opacity ---
-				// Player has returned to start. Reset alpha to 1.0 so they look solid during replay.
 				playerMat.alpha = 1.0;
-				// --- FIX END ---
-				
 				if (rewindState.onComplete) rewindState.onComplete();
-				
-				// Init Replay
 				replayState.currentIndex = 0;
 				setupReplaySegment(0);
 			}
@@ -152,6 +177,17 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			return;
 		}
 		
+		// Check if we hit the limit
+		if (recordedTime >= MAX_RECORDING_TIME) {
+			// If we were moving and hit the limit, record the final spot
+			if (isMoving) {
+				isMoving = false;
+				addWaypoint('MOVE');
+			}
+			playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
+			return; // Stop processing input
+		}
+		
 		handleInputAndRecording();
 	});
 	
@@ -160,7 +196,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const camera = cameraManager.getActiveCamera();
 		const isFirstPerson = (camera.name === 'firstPersonCam');
 		
-		// Visibility of cap
 		cap.setEnabled(!isFirstPerson);
 		
 		let moveDir = new BABYLON.Vector3(0, 0, 0);
@@ -181,7 +216,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			moveDir = forward.scale(z).add(right.scale(x));
 			if (z !== 0 || x !== 0) hasInput = true;
 		} else {
-			// Follow/Free Cam
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
 			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
 			
@@ -195,15 +229,23 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			}
 		}
 		
+		// Jump Input
+		const isJumping = inputMap[' '];
+		if (isJumping) hasInput = true;
+		
+		// --- CHANGED: Only increment time if input is active ---
+		if (hasInput) {
+			const dt = scene.getEngine().getDeltaTime() / 1000;
+			recordedTime += dt;
+			if (recordedTime > MAX_RECORDING_TIME) recordedTime = MAX_RECORDING_TIME;
+		}
+		
 		if (moveDir.length() > 0) moveDir.normalize();
 		
-		// Physics Movement
 		const currentVel = new BABYLON.Vector3();
 		playerAgg.body.getLinearVelocityToRef(currentVel);
 		const targetVelocity = moveDir.scale(speed);
 		
-		// Jump
-		const isJumping = inputMap[' '];
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
 		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
 		let yVel = currentVel.y;
@@ -211,20 +253,18 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 		
-		// Rotation (Third Person)
 		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
 			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
 			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 0.2);
 		}
 		
 		// --- Recording Logic ---
-		// Detect state change: Moving -> Stopped
 		if (hasInput) {
 			isMoving = true;
 		} else {
 			if (isMoving) {
-				// Just stopped moving. Record a waypoint.
-				// We check velocity to ensure they actually stopped or just released keys
+				// Player just stopped
+				// Check if we actually moved (velocity check) or just released keys
 				if (currentVel.length() < 0.5) {
 					isMoving = false;
 					addWaypoint('MOVE');
@@ -236,7 +276,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	// --- Replay Logic Implementation ---
 	const setupReplaySegment = (index) => {
 		if (index >= waypoints.length - 1) {
-			// End of replay
 			animationState = 'NONE';
 			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
 			if (replayState.onComplete) replayState.onComplete();
@@ -250,21 +289,11 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		replayState.startTime = performance.now();
 		replayState.startPos.copyFrom(currentWp.position);
 		replayState.startRot = currentWp.rotation;
+		replayState.segmentDuration = Math.max(currentWp.duration, 0.01);
 		
-		// Notify UI
 		if (replayState.onProgress) replayState.onProgress(index);
 		
-		// Logic based on Next Waypoint Type
-		if (nextWp.type === 'MOVE') {
-			const dist = BABYLON.Vector3.Distance(currentWp.position, nextWp.position);
-			// Calculate duration based on speed
-			replayState.segmentDuration = Math.max(dist / MOVEMENT_SPEED_REPLAY, 0.5); // Min 0.5s
-			replayState.isFiring = false;
-		} else if (nextWp.type === 'FIRE') {
-			// It's a fire action. We stay at current pos, rotate to fire angle, fire, then wait.
-			replayState.segmentDuration = 1.0; // Time to aim
-			replayState.isFiring = true;
-		}
+		replayState.isFiring = (nextWp.type === 'FIRE');
 	};
 	
 	const processReplayLoop = () => {
@@ -275,41 +304,20 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		const currentWp = waypoints[replayState.currentIndex];
 		const nextWp = waypoints[replayState.currentIndex + 1];
 		
-		if (nextWp.type === 'MOVE') {
-			// Interpolate Position
-			const smoothT = t * t * (3 - 2 * t);
-			const curPos = BABYLON.Vector3.Lerp(replayState.startPos, nextWp.position, smoothT);
-			
-			// Interpolate Rotation (Start Angle -> End Angle)
-			const curRot = BABYLON.Scalar.LerpAngle(replayState.startRot, nextWp.rotation, smoothT);
-			
-			playerAgg.body.setTargetTransform(curPos, playerRoot.rotationQuaternion);
-			playerVisual.rotation.y = curRot;
-			
-			if (t >= 1.0) {
-				setupReplaySegment(replayState.currentIndex + 1);
-			}
-		} else if (nextWp.type === 'FIRE') {
-			// Rotate towards the shot direction
-			const smoothT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-			
-			// We stay at startPos (which is currentWp.position)
-			playerAgg.body.setTargetTransform(replayState.startPos, playerRoot.rotationQuaternion);
-			
-			// Rotate from movement angle to shot angle
-			const curRot = BABYLON.Scalar.LerpAngle(replayState.startRot, nextWp.rotation, smoothT);
-			playerVisual.rotation.y = curRot;
-			
-			if (t >= 1.0) {
-				// Fire!
+		const smoothT = t * t * (3 - 2 * t);
+		const curPos = BABYLON.Vector3.Lerp(replayState.startPos, nextWp.position, smoothT);
+		const curRot = BABYLON.Scalar.LerpAngle(replayState.startRot, nextWp.rotation, smoothT);
+		
+		playerAgg.body.setTargetTransform(curPos, playerRoot.rotationQuaternion);
+		playerVisual.rotation.y = curRot;
+		
+		if (t >= 1.0) {
+			if (nextWp.type === 'FIRE') {
 				if (replayState.fireCallback) {
 					replayState.fireCallback(nextWp);
 				}
-				
-				// Small pause after firing before next move?
-				// For now, immediate transition
-				setupReplaySegment(replayState.currentIndex + 1);
 			}
+			setupReplaySegment(replayState.currentIndex + 1);
 		}
 	};
 	
@@ -317,56 +325,60 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		playerRoot,
 		playerVisual,
 		onWaypointsChanged,
+		getRecordedTime: () => recordedTime,
+		MAX_RECORDING_TIME,
+		FIRE_COST,
 		
 		startTurn: () => {
 			isInputEnabled = true;
 			isMoving = false;
 			waypoints = [];
-			// Add initial waypoint
-			addWaypoint('MOVE');
+			recordedTime = 0;
+			addWaypoint('MOVE', { timestamp: 0 });
 		},
 		
 		disableInput: () => {
 			isInputEnabled = false;
-			// Ensure we record the final resting spot if not already
-			if (waypoints.length > 0) {
-				const last = waypoints[waypoints.length - 1];
-				const dist = BABYLON.Vector3.Distance(last.position, playerRoot.absolutePosition);
-				if (dist > 0.1) {
-					addWaypoint('MOVE');
-				}
-			}
 		},
 		
-		addWaypoint, // Exposed for Fire Manager
-		removeWaypoint, // Exposed for UI
+		addWaypoint,
+		removeWaypoint,
 		
 		resolveTurnWithWaypoints: (fireCallback, onReplayStart, onComplete, onProgress) => {
-			// 1. Physics Reset
+			// 1. Finalize Recording
+			const lastWp = waypoints[waypoints.length - 1];
+			if (lastWp) {
+				lastWp.duration = recordedTime - lastWp.timestamp;
+			}
+			
+			// Note: We do NOT add a WAIT segment anymore because we only replay recorded actions.
+			// The replay will simply end when actions run out.
+			
+			onWaypointsChanged.notifyObservers(waypoints);
+			
+			// 2. Physics Reset
 			playerAgg.body.setMotionType(BABYLON.PhysicsMotionType.ANIMATED);
 			playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
 			playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
 			
-			// 2. Setup Rewind (Current -> Start)
+			// 3. Setup Rewind
 			animationState = 'REWIND';
-			playerMat.alpha = 0.5; // Ghost mode
+			playerMat.alpha = 0.5;
 			
 			rewindState.startPos.copyFrom(playerRoot.absolutePosition);
 			rewindState.startRot = playerVisual.rotation.y;
 			
-			// Target is the first waypoint
 			if (waypoints.length > 0) {
 				rewindState.endPos.copyFrom(waypoints[0].position);
 				rewindState.endRot = waypoints[0].rotation;
 			} else {
-				// Fallback
 				rewindState.endPos.copyFrom(rewindState.startPos);
 			}
 			
 			rewindState.startTime = performance.now();
 			rewindState.onComplete = onReplayStart;
 			
-			// 3. Setup Replay Callbacks
+			// 4. Setup Replay Callbacks
 			replayState.fireCallback = fireCallback;
 			replayState.onComplete = () => {
 				playerMat.alpha = 1.0;

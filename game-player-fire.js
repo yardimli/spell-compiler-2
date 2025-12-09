@@ -51,7 +51,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	};
 	
 	// --- Helper: Face Target ---
-	// Rotates the player visual to look at the specific target mesh
 	const faceTarget = (target) => {
 		if (!target || target.isDisposed()) return;
 		const dir = target.absolutePosition.subtract(playerVisual.absolutePosition);
@@ -78,8 +77,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			if (currentIndex !== -1) nextIndex = (currentIndex + 1) % visibleTargets.length;
 		}
 		setTarget(visibleTargets[nextIndex]);
-		
-		// --- CHANGED: Rotate player to face the selected target ---
 		faceTarget(currentTarget);
 	};
 	
@@ -108,19 +105,15 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// --- Input: Mouse Click Selection ---
 	scene.onPointerObservable.add((pointerInfo) => {
-		// Only allow selection if turn is active
 		if (!isTurnActive) return;
 		
 		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
-			// Check for Left Click (0)
 			if (pointerInfo.event.button === 0) {
 				const pickInfo = pointerInfo.pickInfo;
 				if (pickInfo && pickInfo.hit && pickInfo.pickedMesh) {
 					const mesh = pickInfo.pickedMesh;
-					// Check if the clicked mesh is a target sphere
 					if (mesh.name.startsWith('sphere')) {
 						setTarget(mesh);
-						// --- CHANGED: Rotate player to face the clicked target ---
 						faceTarget(mesh);
 					}
 				}
@@ -132,7 +125,13 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// 1. Ghost Bullet (Planning Phase)
 	const fireGhostBullet = (power) => {
-		// Calculate rotation needed to face target
+		// --- CHANGED: Check Time Budget ---
+		const remaining = playerManager.MAX_RECORDING_TIME - playerManager.getRecordedTime();
+		if (remaining < playerManager.FIRE_COST) {
+			console.log("Not enough time to fire!");
+			return;
+		}
+		
 		let aimRotation = playerVisual.rotation.y;
 		
 		if (currentTarget && !currentTarget.isDisposed()) {
@@ -140,23 +139,21 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			aimRotation = Math.atan2(dir.x, dir.z);
 		}
 		
-		// Snap player visual to face target immediately
 		playerVisual.rotation.y = aimRotation;
 		
-		// Add Waypoint
+		// Add Waypoint (Cost is applied inside addWaypoint)
 		playerManager.addWaypoint('FIRE', {
 			power: power,
-			target: currentTarget, // Store reference
+			target: currentTarget,
 			rotation: aimRotation
 		});
 		
-		// Visual feedback (Ghost bullet)
+		// Visual feedback
 		spawnBullet(false, power, playerVisual.absolutePosition, aimRotation, currentTarget);
 	};
 	
 	// 2. Real Bullet (Replay Phase)
 	const fireRealBullet = (waypointData) => {
-		// Position is where the player is currently standing (which should be the waypoint pos)
 		const spawnPos = playerVisual.absolutePosition.clone();
 		spawnBullet(true, waypointData.power, spawnPos, waypointData.rotation, waypointData.target);
 	};
@@ -176,13 +173,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const spawnHeight = position.clone();
 		spawnHeight.y += 1.5;
 		
-		// --- Calculate 3D Aim Direction ---
 		let aimDir;
 		if (target && !target.isDisposed()) {
-			// Aim at the target's current position in 3D space
 			aimDir = target.absolutePosition.subtract(spawnHeight).normalize();
 		} else {
-			// Fallback: Horizontal direction based on rotation
 			const rotationMatrix = BABYLON.Matrix.RotationY(rotationY);
 			aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
 		}
@@ -191,7 +185,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		shadowGenerator.addShadowCaster(bullet);
 		
 		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
-		bulletAgg.body.setGravityFactor(0); // Bullets fly straight
+		bulletAgg.body.setGravityFactor(0);
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
 		
 		const bulletData = { mesh: bullet, agg: bulletAgg, age: 0, isDead: false, isReal: isReal };
@@ -222,7 +216,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		
-		// Cleanup bullets
 		for (let i = bullets.length - 1; i >= 0; i--) {
 			const b = bullets[i];
 			b.age += dt;
@@ -233,7 +226,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			}
 		}
 		
-		// Charging UI
 		if (inputMap['z']) {
 			if (currentCharge < maxCharge) currentCharge += chargeRate;
 			powerContainer.style.display = 'block';

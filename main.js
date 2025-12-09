@@ -8,7 +8,7 @@ import { initGameSceneAlt } from './game-scene-alt';
 import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
-import { initGameTimeline } from './game-timeline'; // NEW
+import { initGameTimeline } from './game-timeline';
 
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
@@ -49,17 +49,18 @@ const createScene = async function () {
 	// 3. Fire System (Pass playerManager to add waypoints)
 	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, playerManager);
 	
-	// 4. Timeline UI (NEW)
+	// 4. Timeline UI
 	const timelineManager = initGameTimeline(playerManager);
 	
 	// 5. Turn Logic
+	// --- CHANGED: Turn duration remains 30 seconds for thinking time ---
 	const TURN_DURATION = 30;
 	let timeLeft = TURN_DURATION;
 	let timerInterval = null;
 	let isTurnPhase = false;
 	
 	const updateTimerUI = () => {
-		timerText.innerText = timeLeft;
+		timerText.innerText = Math.ceil(timeLeft);
 		const percentage = (timeLeft / TURN_DURATION) * 100;
 		timerSpinner.style.background = `conic-gradient(#00ff00 ${percentage}%, #333 0%)`;
 		if (timeLeft <= 5) timerSpinner.style.background = `conic-gradient(#ff0000 ${percentage}%, #333 0%)`;
