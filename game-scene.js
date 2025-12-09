@@ -18,9 +18,12 @@ export const initGameScene = (scene) => {
 	scene.createDefaultSkybox(envTexture, true, 1000);
 	
 	// --- Constants ---
-	const groundSize = 50;
+	const groundSize = 60;
 	const wallHeight = 4;
-	const wallThickness = 2;
+	
+	// --- Wall Configuration ---
+	const tileSize = 4;       // Distance between grid centers
+	const wallThickness = 0.5; // Thin walls
 	
 	// --- Texture Generation Functions ---
 	const createFloorTexture = (scene, tileSize) => {
@@ -39,8 +42,7 @@ export const initGameScene = (scene) => {
 	const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: groundSize, height: groundSize, subdivisions: 100 }, scene);
 	ground.receiveShadows = true;
 	
-	const floorTileSize = 5;
-	const floorTexture = createFloorTexture(scene, floorTileSize);
+	const floorTexture = createFloorTexture(scene, 5);
 	
 	const groundMat = new BABYLON.StandardMaterial('groundMat', scene);
 	groundMat.diffuseTexture = floorTexture;
@@ -56,42 +58,42 @@ export const initGameScene = (scene) => {
 		scene
 	);
 	
-	// --- Walls ---
-	const wallTileSize = 10;
-	const wallTexture = createWallTexture(scene);
-	
-	const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
-	wallMat.diffuseTexture = wallTexture;
-	wallMat.specularColor = new BABYLON.Color3(0.6, 0.6, 0.6);
-	wallMat.specularPower = 264;
-	
-	const faceUV = [];
-	faceUV[0] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
-	faceUV[1] = new BABYLON.Vector4(0, 0, groundSize / wallTileSize, wallHeight / wallTileSize);
-	faceUV[2] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
-	faceUV[3] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, wallHeight / wallTileSize);
-	faceUV[4] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
-	faceUV[5] = new BABYLON.Vector4(0, 0, wallThickness / wallTileSize, groundSize / wallTileSize);
-	
-	const wallOffset = groundSize / 2;
-	
-	const wallsConfig = [
-		{ x: 0, z: wallOffset, rotation: 0 },
-		{ x: 0, z: -wallOffset, rotation: Math.PI },
-		{ x: wallOffset, z: 0, rotation: -Math.PI / 2 },
-		{ x: -wallOffset, z: 0, rotation: Math.PI / 2 }
+	// --- Maze Generation ---
+	// 1 = Wall, 0 = Path
+	const mazeMap = [
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+		[1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+		[1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+		[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+		[1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1],
+		[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+		[1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+		[1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 	];
 	
-	wallsConfig.forEach((config, index) => {
-		const wall = BABYLON.MeshBuilder.CreateBox(`wall_${index}`, {
-			width: groundSize,
+	const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
+	wallMat.diffuseTexture = createWallTexture(scene);
+	wallMat.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+	
+	const rows = mazeMap.length;
+	const cols = mazeMap[0].length;
+	const startX = -(cols * tileSize) / 2 + tileSize / 2;
+	const startZ = (rows * tileSize) / 2 - tileSize / 2;
+	
+	// --- Helper to create a physics wall segment ---
+	const createWallSegment = (name, width, depth, position) => {
+		const wall = BABYLON.MeshBuilder.CreateBox(name, {
+			width: width,
 			height: wallHeight,
-			depth: wallThickness,
-			faceUV: faceUV
+			depth: depth
 		}, scene);
 		
-		wall.position.set(config.x, wallHeight / 2, config.z);
-		wall.rotation.y = config.rotation;
+		wall.position = position;
 		wall.material = wallMat;
 		wall.receiveShadows = true;
 		shadowGenerator.addShadowCaster(wall);
@@ -99,10 +101,56 @@ export const initGameScene = (scene) => {
 		new BABYLON.PhysicsAggregate(
 			wall,
 			BABYLON.PhysicsShapeType.BOX,
-			{ mass: 0, restitution: 0.5 },
+			{ mass: 0, restitution: 0.1, friction: 0.0 },
 			scene
 		);
-	});
+	};
+	
+	// --- Logic: Joints and Links ---
+	for (let r = 0; r < rows; r++) {
+		for (let c = 0; c < cols; c++) {
+			if (mazeMap[r][c] === 1) {
+				const posX = startX + c * tileSize;
+				const posZ = startZ - r * tileSize;
+				const posY = wallHeight / 2;
+				
+				// 1. Create the "Joint"
+				// Renamed to include 'wall_' so AI raycast detects it
+				createWallSegment(
+					`wall_joint_${r}_${c}`,
+					wallThickness,
+					wallThickness,
+					new BABYLON.Vector3(posX, posY, posZ)
+				);
+				
+				// 2. Check Right Neighbor (Connect horizontally)
+				if (c + 1 < cols && mazeMap[r][c + 1] === 1) {
+					const linkWidth = tileSize - wallThickness;
+					const linkPos = new BABYLON.Vector3(posX + tileSize / 2, posY, posZ);
+					
+					createWallSegment(
+						`wall_linkH_${r}_${c}`,
+						linkWidth + 0.02,
+						wallThickness,
+						linkPos
+					);
+				}
+				
+				// 3. Check Bottom Neighbor (Connect vertically)
+				if (r + 1 < rows && mazeMap[r + 1][c] === 1) {
+					const linkDepth = tileSize - wallThickness;
+					const linkPos = new BABYLON.Vector3(posX, posY, posZ - tileSize / 2);
+					
+					createWallSegment(
+						`wall_linkV_${r}_${c}`,
+						wallThickness,
+						linkDepth + 0.02,
+						linkPos
+					);
+				}
+			}
+		}
+	}
 	
 	return { shadowGenerator, groundSize };
 };

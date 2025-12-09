@@ -34,11 +34,12 @@ const createScene = async function () {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// 1. Scene
+	// 1. Scene (Maze)
 	const { shadowGenerator } = initGameScene(scene);
+	// 2. Enemies (Replaces Alt Scene)
 	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator);
 	
-	// 2. Player & Camera
+	// 3. Player & Camera
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
 	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef);
 	const { playerRoot, playerVisual } = playerManager;
@@ -46,14 +47,13 @@ const createScene = async function () {
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	
-	// 3. Fire System (Pass playerManager to add waypoints)
+	// 4. Fire System (Pass playerManager to add waypoints)
 	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, playerManager);
 	
-	// 4. Timeline UI
+	// 5. Timeline UI
 	const timelineManager = initGameTimeline(playerManager);
 	
-	// 5. Turn Logic
-	// --- CHANGED: Turn duration remains 30 seconds for thinking time ---
+	// 6. Turn Logic
 	const TURN_DURATION = 30;
 	let timeLeft = TURN_DURATION;
 	let timerInterval = null;
@@ -72,6 +72,7 @@ const createScene = async function () {
 		updateTimerUI();
 		btnEndTurn.disabled = false;
 		
+		// Freeze enemies during planning phase
 		sceneAltManager.setBallsFrozen(true);
 		playerManager.startTurn();
 		fireManager.setTurnActive(true);
@@ -103,6 +104,7 @@ const createScene = async function () {
 			},
 			// On Replay Start (Rewind Complete)
 			() => {
+				// Unfreeze enemies during action phase
 				sceneAltManager.setBallsFrozen(false);
 			},
 			// On Complete
@@ -110,7 +112,6 @@ const createScene = async function () {
 				startTurn();
 			},
 			// On Progress (Update Timeline UI)
-			// --- CHANGED: Accept progress value ---
 			(index, progress) => {
 				timelineManager.updateProgress(index, progress);
 			}
