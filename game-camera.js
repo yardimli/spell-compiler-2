@@ -31,8 +31,9 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	firstPersonCam.speed = 0; // Movement handled by player physics
 	firstPersonCam.angularSensibility = 2000;
 	
-	// 3. Free Camera (God Mode)
-	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 20, -30), scene);
+	// 3. Free Camera (God Mode) - Start with Bird's Eye View
+	// Positioned high up (y=60) and slightly back (z=-1) to avoid gimbal lock when looking down
+	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 60, -1), scene);
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
 	
@@ -41,9 +42,32 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	// We want Right Click to Rotate and Left Click to Pan, handled manually below.
 	freeCam.inputs.removeByType('FreeCameraMouseInput');
 	
-	// Default active
-	scene.activeCamera = followCam;
-	followCam.attachControl(canvas, true);
+	// --- UI Logic ---
+	const btnFollow = document.getElementById('btn-follow');
+	const btnFirst = document.getElementById('btn-first');
+	const btnFree = document.getElementById('btn-free');
+	
+	const setActiveBtn = (btn) => {
+		[btnFollow, btnFirst, btnFree].forEach(b => b.classList.remove('active'));
+		btn.classList.add('active');
+	};
+	
+	const switchCamera = (newCam, btn) => {
+		if (scene.activeCamera !== newCam) {
+			scene.activeCamera.detachControl();
+			scene.activeCamera = newCam;
+			scene.activeCamera.attachControl(canvas, true);
+			setActiveBtn(btn);
+			
+			// Focus canvas so keyboard events (WASD) work immediately
+			canvas.focus();
+		}
+	};
+	
+	// --- Set Default Active Camera to Free Camera ---
+	scene.activeCamera = freeCam;
+	freeCam.attachControl(canvas, true);
+	setActiveBtn(btnFree);
 	
 	// --- Camera Logic Loop ---
 	scene.onBeforeRenderObservable.add(() => {
@@ -116,8 +140,6 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 				lastPointerY = y;
 				
 				// Right Click = Rotate (Look), Left Click = Pan ---
-				// Swapped logic to match the comment and intended behavior.
-				// Previously, Right Click was triggering Pan, which felt like "dragging very little".
 				if (isRightMouseDown) {
 					// Rotate Camera (Look around)
 					const sensitivity = 0.002;
@@ -139,28 +161,6 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			}
 		}
 	});
-	
-	// --- UI Logic ---
-	const btnFollow = document.getElementById('btn-follow');
-	const btnFirst = document.getElementById('btn-first');
-	const btnFree = document.getElementById('btn-free');
-	
-	const setActiveBtn = (btn) => {
-		[btnFollow, btnFirst, btnFree].forEach(b => b.classList.remove('active'));
-		btn.classList.add('active');
-	};
-	
-	const switchCamera = (newCam, btn) => {
-		if (scene.activeCamera !== newCam) {
-			scene.activeCamera.detachControl();
-			scene.activeCamera = newCam;
-			scene.activeCamera.attachControl(canvas, true);
-			setActiveBtn(btn);
-			
-			// Focus canvas so keyboard events (WASD) work immediately
-			canvas.focus();
-		}
-	};
 	
 	btnFollow.addEventListener('click', () => switchCamera(followCam, btnFollow));
 	btnFirst.addEventListener('click', () => switchCamera(firstPersonCam, btnFirst));
