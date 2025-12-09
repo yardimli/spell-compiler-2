@@ -33,7 +33,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	
 	// 3. Free Camera (God Mode) - Start with Bird's Eye View
 	// Positioned high up (y=60) and slightly back (z=-1) to avoid gimbal lock when looking down
-	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 60, -1), scene);
+	const freeCam = new BABYLON.UniversalCamera('freeCam', new BABYLON.Vector3(0, 90, -1), scene);
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
 	
