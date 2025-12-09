@@ -93,6 +93,8 @@ const createScene = async function () {
 		playerManager.disableInput();
 		fireManager.setTurnActive(false);
 		
+		canvas.focus();
+		
 		// Resolve Turn: Rewind -> Replay Waypoints
 		playerManager.resolveTurnWithWaypoints(
 			// Fire Callback (Replay Phase)

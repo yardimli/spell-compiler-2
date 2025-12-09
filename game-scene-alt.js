@@ -1,9 +1,10 @@
 import * as BABYLON from 'babylonjs';
+import { initGameSceneAltRecording } from './game-scene-alt-recording';
+import { initGameSceneAltPlayback } from './game-scene-alt-playback';
 
 export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	// --- 3D Text ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
-	
 	try {
 		const fontResponse = await fetch(fontURL);
 		const fontData = await fontResponse.json();
@@ -16,11 +17,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 			'text',
 			'Hello World',
 			fontData,
-			{
-				size: 2,
-				depth: 0.5,
-				resolution: 64
-			},
+			{ size: 2, depth: 0.5, resolution: 64 },
 			scene
 		);
 		
@@ -63,7 +60,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	
 	// --- Bouncing Balls (Environment) ---
 	const ballCount = 10;
-	const ballAggregates = []; // Store physics bodies to control them later
+	const ballAggregates = [];
 	
 	for (let i = 0; i < ballCount; i++) {
 		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
@@ -88,37 +85,18 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		ballAggregates.push(agg);
 	}
 	
-	// --- Control Function for Turn System ---
+	// --- Initialize Sub-Modules ---
+	const recordingModule = initGameSceneAltRecording();
+	const playbackModule = initGameSceneAltPlayback();
+	
+	// --- Control Function ---
 	return {
 		setBallsFrozen: (isFrozen) => {
-			// 1. Cleanup: Remove any aggregates whose meshes have been disposed (destroyed)
-			for (let i = ballAggregates.length - 1; i >= 0; i--) {
-				const agg = ballAggregates[i];
-				if (!agg || !agg.body || !agg.transformNode || agg.transformNode.isDisposed()) {
-					ballAggregates.splice(i, 1);
-				}
+			if (isFrozen) {
+				recordingModule.freezeBalls(ballAggregates);
+			} else {
+				playbackModule.unfreezeBalls(ballAggregates);
 			}
-			
-			// 2. Apply State to remaining valid balls
-			ballAggregates.forEach(agg => {
-				if (agg && agg.body) {
-					if (isFrozen) {
-						// Lock them in place
-						agg.body.setMotionType(BABYLON.PhysicsMotionType.STATIC);
-					} else {
-						// Unlock them
-						agg.body.setMotionType(BABYLON.PhysicsMotionType.DYNAMIC);
-						
-						// --- FIX: Force wake up using correct API ---
-						if (agg.body.setActivationState) {
-							agg.body.setActivationState(BABYLON.PhysicsActivationState.ACTIVE);
-						} else {
-							// Fallback: Apply a tiny negligible impulse to force the physics engine to wake the body
-							agg.body.applyImpulse(new BABYLON.Vector3(0, -0.001, 0), agg.transformNode.absolutePosition);
-						}
-					}
-				}
-			});
 		}
 	};
 };
