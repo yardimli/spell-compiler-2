@@ -1,6 +1,6 @@
 import * as BABYLON from 'babylonjs';
-import { initGamePlayerFireRecording } from './game-player-fire-recording';
-import { initGamePlayerFirePlayback } from './game-player-fire-playback';
+import {initGamePlayerFireRecording} from './game-player-fire-recording';
+import {initGamePlayerFirePlayback} from './game-player-fire-playback';
 
 export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager, playerManager) => {
 	const bullets = [];

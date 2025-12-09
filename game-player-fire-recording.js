@@ -130,7 +130,9 @@ export const initGamePlayerFireRecording = (scene, playerVisual, cameraManager, 
 			if (active) fireControl.classList.remove('hidden');
 			else fireControl.classList.add('hidden');
 		},
-		setOnFireGhost: (cb) => { onFireGhost = cb; },
+		setOnFireGhost: (cb) => {
+			onFireGhost = cb;
+		},
 		fireGhostBullet // Exposed to be called by internal logic via wrapper
 	};
 };

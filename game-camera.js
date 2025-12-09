@@ -2,7 +2,9 @@ import * as BABYLON from 'babylonjs';
 
 export const initGameCamera = (scene, canvas, playerRoot) => {
 	// Prevent context menu on right click for the canvas
-	canvas.oncontextmenu = (e) => { e.preventDefault(); };
+	canvas.oncontextmenu = (e) => {
+		e.preventDefault();
+	};
 	
 	// 1. Follow Camera (Third Person)
 	const followCam = new BABYLON.ArcRotateCamera('followCam', -Math.PI / 2, Math.PI / 2.5, 20, new BABYLON.Vector3(0, 20, 0), scene);
@@ -13,8 +15,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	followCam.lowerRadiusLimit = 5;
 	followCam.upperRadiusLimit = 50;
 	
-	// --- CHANGED: Swap Mouse Controls for Follow Camera ---
-	// Goal: Left Click (0) = Pan, Right Click (2) = Rotate
+	//  Left Click (0) = Pan, Right Click (2) = Rotate
 	followCam.panningMouseButton = 0; // Set Pan to Left Click
 	
 	// Reassign button mapping: [Primary(Rotate), Secondary(Pan), Tertiary(Zoom)]
@@ -35,7 +36,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
 	
-	// --- NEW: Remove default mouse input ---
+	// --- Remove default mouse input ---
 	// This prevents the default behavior (Left Click Rotate) from conflicting with our custom controls.
 	// We want Right Click to Rotate and Left Click to Pan, handled manually below.
 	freeCam.inputs.removeByType('FreeCameraMouseInput');
@@ -57,7 +58,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			headPos.y += 1.5; // Eye level
 			firstPersonCam.position = headPos;
 			
-			// --- CHANGED: Sync Camera Rotation with Player Rotation in FPS ---
+			// --- Sync Camera Rotation with Player Rotation in FPS ---
 			// Since A/D now rotates the player mesh, the camera must follow that rotation.
 			// We find the player visual (child of root) to get the rotation.
 			const playerVisual = playerRoot.getChildren().find(m => m.name === 'playerVisual');
@@ -96,6 +97,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 					isLeftMouseDown = true;
 				}
 				break;
+			
 			case BABYLON.PointerEventTypes.POINTERUP:
 				if (pointerInfo.event.button === 2) {
 					isRightMouseDown = false;
@@ -103,6 +105,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 					isLeftMouseDown = false;
 				}
 				break;
+			
 			case BABYLON.PointerEventTypes.POINTERMOVE: {
 				const x = pointerInfo.event.clientX;
 				const y = pointerInfo.event.clientY;
@@ -112,7 +115,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 				lastPointerX = x;
 				lastPointerY = y;
 				
-				// --- CHANGED: Right Click = Rotate (Look), Left Click = Pan ---
+				// Right Click = Rotate (Look), Left Click = Pan ---
 				// Swapped logic to match the comment and intended behavior.
 				// Previously, Right Click was triggering Pan, which felt like "dragging very little".
 				if (isRightMouseDown) {

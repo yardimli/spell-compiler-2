@@ -6,7 +6,7 @@ export const initGamePlayerFirePlayback = (scene, shadowGenerator) => {
 	const createExplosion = (position, color = null) => {
 		const fragmentCount = 8;
 		for (let i = 0; i < fragmentCount; i++) {
-			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', { type: 1, size: 0.3 }, scene);
+			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', {type: 1, size: 0.3}, scene);
 			frag.position = position.clone();
 			frag.position.addInPlace(new BABYLON.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5));
 			
@@ -14,7 +14,10 @@ export const initGamePlayerFirePlayback = (scene, shadowGenerator) => {
 			fragMat.diffuseColor = color || new BABYLON.Color3(1, 0.5 + Math.random() * 0.5, 0);
 			frag.material = fragMat;
 			
-			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, { mass: 0.2, restitution: 0.5 }, scene);
+			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, {
+				mass: 0.2,
+				restitution: 0.5
+			}, scene);
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
 			fragAgg.body.applyImpulse(dir.scale(5 + Math.random() * 5), frag.absolutePosition);
 			
@@ -37,7 +40,7 @@ export const initGamePlayerFirePlayback = (scene, shadowGenerator) => {
 	
 	// --- Bullet Spawning ---
 	const spawnBullet = (isReal, power, position, rotationY, target, bulletsArray) => {
-		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', { diameter: 0.4 }, scene);
+		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', {diameter: 0.4}, scene);
 		bullet.material = new BABYLON.StandardMaterial('bulletMat', scene);
 		
 		if (isReal) {
@@ -62,11 +65,14 @@ export const initGamePlayerFirePlayback = (scene, shadowGenerator) => {
 		bullet.position = spawnHeight.add(aimDir.scale(1.5));
 		shadowGenerator.addShadowCaster(bullet);
 		
-		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
+		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, {
+			mass: 0.5,
+			restitution: 0.8
+		}, scene);
 		bulletAgg.body.setGravityFactor(0);
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
 		
-		const bulletData = { mesh: bullet, agg: bulletAgg, age: 0, isDead: false, isReal: isReal };
+		const bulletData = {mesh: bullet, agg: bulletAgg, age: 0, isDead: false, isReal: isReal};
 		bulletsArray.push(bulletData);
 		
 		bulletAgg.body.setCollisionCallbackEnabled(true);

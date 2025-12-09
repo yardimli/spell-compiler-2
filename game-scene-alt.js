@@ -1,6 +1,6 @@
 import * as BABYLON from 'babylonjs';
-import { initGameSceneAltRecording } from './game-scene-alt-recording';
-import { initGameSceneAltPlayback } from './game-scene-alt-playback';
+import {initGameSceneAltRecording} from './game-scene-alt-recording';
+import {initGameSceneAltPlayback} from './game-scene-alt-playback';
 
 export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) => {
 	// --- 3D Text ---
@@ -17,7 +17,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 			'text',
 			'PAC-MAZE',
 			fontData,
-			{ size: 2, depth: 0.5, resolution: 64 },
+			{size: 2, depth: 0.5, resolution: 64},
 			scene
 		);
 		
@@ -50,7 +50,6 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 	// --- Ghost Logic (Ghosts) ---
 	const ghosts = [];
 	const ghostSpeed = 4.0;
-	// --- CHANGED: Define diameter here to ensure Physics matches Visuals ---
 	const ghostDiameter = 4.2;
 	const ghostRadius = ghostDiameter / 2;
 	
@@ -60,12 +59,12 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 		root.position = position;
 		
 		// Head
-		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', { diameter: ghostDiameter, segments: 16 }, scene);
+		const head = BABYLON.MeshBuilder.CreateSphere(name + 'Head', {diameter: ghostDiameter, segments: 16}, scene);
 		head.position.y = 0.5;
 		head.parent = root;
 		
 		// Skirt
-		const skirt = BABYLON.MeshBuilder.CreateCylinder(name + 'Skirt', { height: 0.8, diameter: ghostDiameter }, scene);
+		const skirt = BABYLON.MeshBuilder.CreateCylinder(name + 'Skirt', {height: 0.8, diameter: ghostDiameter}, scene);
 		skirt.position.y = 0;
 		skirt.parent = root;
 		
@@ -83,12 +82,12 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 		eyePupil.diffuseColor = BABYLON.Color3.Blue();
 		
 		const createEye = (x) => {
-			const eye = BABYLON.MeshBuilder.CreateSphere('eye', { diameter: 0.6 }, scene);
+			const eye = BABYLON.MeshBuilder.CreateSphere('eye', {diameter: 0.6}, scene);
 			eye.material = eyeWhite;
 			eye.position.set(x, 0.8, 1.0);
 			eye.parent = root;
 			
-			const pupil = BABYLON.MeshBuilder.CreateSphere('pupil', { diameter: 0.3 }, scene);
+			const pupil = BABYLON.MeshBuilder.CreateSphere('pupil', {diameter: 0.3}, scene);
 			pupil.material = eyePupil;
 			pupil.position.set(0, 0, 0.25);
 			pupil.parent = eye;
@@ -109,10 +108,10 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 	};
 	
 	const ghostTypes = [
-		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: getPos('A', new BABYLON.Vector3(0, 2, 2)) },
-		{ name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: getPos('B', new BABYLON.Vector3(-3, 2, 0)) },
-		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: getPos('C', new BABYLON.Vector3(3, 2, 0)) },
-		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: getPos('D', new BABYLON.Vector3(0, 2, -2)) }
+		{name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: getPos('A', new BABYLON.Vector3(0, 2, 2))},
+		{name: 'Pinky', color: new BABYLON.Color3(1, 0.7, 0.8), startPos: getPos('B', new BABYLON.Vector3(-3, 2, 0))},
+		{name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: getPos('C', new BABYLON.Vector3(3, 2, 0))},
+		{name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: getPos('D', new BABYLON.Vector3(0, 2, -2))}
 	];
 	
 	let onPlayerCaughtCallback = null;
@@ -120,14 +119,10 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 	ghostTypes.forEach((def) => {
 		const visual = createGhostMesh(def.name, def.color, def.startPos);
 		
-		// Physics: Friction 0 to slide, Restitution 0 to stop dead on impact
-		// --- CHANGED: Added explicit radius to match visual diameter ---
-		// Since 'visual' is a TransformNode, PhysicsAggregate cannot infer the size correctly from geometry.
-		// We must provide the radius explicitly to prevent the collider from defaulting to a smaller size (causing intersection).
 		const agg = new BABYLON.PhysicsAggregate(
 			visual,
 			BABYLON.PhysicsShapeType.SPHERE,
-			{ mass: 10, restitution: 0, friction: 0, radius: ghostRadius },
+			{mass: 10, restitution: 0, friction: 0, radius: ghostRadius},
 			scene
 		);
 		
@@ -281,6 +276,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator, startPositions) =
 				playbackModule.unfreezeGhosts(ghosts);
 			}
 		},
-		setOnPlayerCaught: (cb) => { onPlayerCaughtCallback = cb; }
+		setOnPlayerCaught: (cb) => {
+			onPlayerCaughtCallback = cb;
+		}
 	};
 };

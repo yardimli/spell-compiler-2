@@ -64,7 +64,6 @@ export const initGameTimeline = (playerManager) => {
 					e.stopPropagation();
 					playerManager.removeWaypoint(index + 1);
 					
-					// --- NEW: Focus back to game canvas ---
 					const canvas = document.getElementById('renderCanvas');
 					if (canvas) canvas.focus();
 				};

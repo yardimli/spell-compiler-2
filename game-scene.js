@@ -155,7 +155,7 @@ export const initGameScene = (scene) => {
 		'P': '#00FF00'    // Player
 	};
 
-// --- NEW: Spawn Gems ---
+// --- Spawn Gems ---
 	const gems = [];
 	const gemMat = new BABYLON.StandardMaterial('gemMat', scene);
 	gemMat.diffuseColor = new BABYLON.Color3(1, 0.84, 0); // Gold

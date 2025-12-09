@@ -1,7 +1,7 @@
 import * as BABYLON from 'babylonjs';
 
 export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerAgg, cameraManager, config) => {
-	const { speed, jumpForce, rotationSpeed, playerHeight, MAX_RECORDING_TIME, FIRE_COST } = config;
+	const {speed, jumpForce, rotationSpeed, playerHeight, MAX_RECORDING_TIME, FIRE_COST} = config;
 	
 	// State
 	let inputMap = {};
@@ -105,19 +105,23 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 		let moveDir = new BABYLON.Vector3(0, 0, 0);
 		let hasInput = false;
 		
-		// --- CHANGED: Rotation & Movement Logic ---
+		// --- Rotation & Movement Logic ---
 		if (isFirstPerson) {
 			// First Person: A/D Rotate, W/S Move Forward/Back, Q/E Strafe
 			if (inputMap['a']) playerVisual.rotation.y -= rotationSpeed;
 			if (inputMap['d']) playerVisual.rotation.y += rotationSpeed;
 			
 			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
-			forward.y = 0; forward.normalize();
+			forward.y = 0;
+			forward.normalize();
 			const right = playerVisual.getDirection(BABYLON.Vector3.Right());
-			right.y = 0; right.normalize();
+			right.y = 0;
+			right.normalize();
 			
-			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
-			let x = (inputMap['e']) ? 1 : 0; x -= (inputMap['q']) ? 1 : 0;
+			let z = (inputMap['w']) ? 1 : 0;
+			z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['e']) ? 1 : 0;
+			x -= (inputMap['q']) ? 1 : 0;
 			
 			// Check rotation input for recording
 			if (inputMap['a'] || inputMap['d']) hasInput = true;
@@ -140,7 +144,8 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 			}
 			
 			// 2. Handle Movement (Relative to Player Facing)
-			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let z = (inputMap['w']) ? 1 : 0;
+			z -= (inputMap['s']) ? 1 : 0;
 			
 			if (z !== 0) {
 				hasInput = true;
@@ -204,9 +209,11 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 			isMoving = false;
 			waypoints = [];
 			recordedTime = 0;
-			addWaypoint('MOVE', { timestamp: 0 });
+			addWaypoint('MOVE', {timestamp: 0});
 		},
-		disableInput: () => { isInputEnabled = false; },
+		disableInput: () => {
+			isInputEnabled = false;
+		},
 		finalizeWaypoints: () => {
 			// Close last waypoint duration
 			const lastWp = waypoints[waypoints.length - 1];

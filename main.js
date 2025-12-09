@@ -64,7 +64,7 @@ const createScene = async function () {
 
 // Gem Collection Loop
 	scene.onBeforeRenderObservable.add(() => {
-		// --- CHANGED: Only collect gems during REPLAY phase ---
+		// --- Only collect gems during REPLAY phase ---
 		if (playerManager.getPlaybackState() !== 'REPLAY') return;
 		
 		if (!playerRoot || gems.length === 0) return;
@@ -180,8 +180,8 @@ const createScene = async function () {
 	startTurn();
 	
 	return scene;
-	
 };
+
 createScene().then(scene => {
 	engine.runRenderLoop(function () {
 		scene.render();

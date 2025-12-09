@@ -1,12 +1,16 @@
 import * as BABYLON from 'babylonjs';
-import { initGamePlayerRecording } from './game-player-recording';
-import { initGamePlayerPlayback } from './game-player-playback';
+import {initGamePlayerRecording} from './game-player-recording';
+import {initGamePlayerPlayback} from './game-player-playback';
+
 export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVector) => {
 	const playerHeight = 8;
 	const playerRadius = 2.2;
 	
 	// 1. Player Root (Physics Body) - Invisible
-	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
+	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', {
+		height: playerHeight,
+		radius: playerRadius
+	}, scene);
 
 // Use provided start position or default
 	const startPosition = startPosVector ? startPosVector.clone() : new BABYLON.Vector3(0, 1.5, -12);
@@ -17,7 +21,10 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVe
 	playerRoot.visibility = 0;
 
 // 2. Player Visual (Visible Mesh) - Child of Root
-	const playerVisual = BABYLON.MeshBuilder.CreateCapsule('playerVisual', { height: playerHeight, radius: playerRadius }, scene);
+	const playerVisual = BABYLON.MeshBuilder.CreateCapsule('playerVisual', {
+		height: playerHeight,
+		radius: playerRadius
+	}, scene);
 	playerVisual.parent = playerRoot;
 	
 	const playerMat = new BABYLON.StandardMaterial('playerMat', scene);
@@ -26,7 +33,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVe
 	shadowGenerator.addShadowCaster(playerVisual);
 
 // Direction Indicator
-	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
+	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', {width: 0.8, height: 0.2, depth: 0.5}, scene);
 	cap.parent = playerVisual;
 	cap.position.set(0, 1.5, playerRadius - 0.2);
 	const capMat = new BABYLON.StandardMaterial('capMat', scene);
@@ -38,10 +45,10 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVe
 	const playerAgg = new BABYLON.PhysicsAggregate(
 		playerRoot,
 		BABYLON.PhysicsShapeType.CAPSULE,
-		{ mass: 1, friction: 0, restitution: 0 },
+		{mass: 1, friction: 0, restitution: 0},
 		scene
 	);
-	playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(0, 0, 0) });
+	playerAgg.body.setMassProperties({inertia: new BABYLON.Vector3(0, 0, 0)});
 
 // --- Configuration ---
 	const config = {
@@ -128,9 +135,10 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosVe
 			});
 		},
 		
-		setOnWin: (cb) => { onWinCallback = cb; },
+		setOnWin: (cb) => {
+			onWinCallback = cb;
+		},
 		
-		// --- NEW: Expose Playback State ---
 		getPlaybackState: () => playbackModule.getState()
 	};
 };
