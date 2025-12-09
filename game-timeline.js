@@ -9,6 +9,12 @@ export const initGameTimeline = (playerManager) => {
 			// Skip the very last waypoint for rendering blocks
 			if (index === waypoints.length - 1) return;
 			
+			const duration = wp.duration || 0;
+			
+			// --- NEW: Skip zero-duration blocks (transitions) ---
+			// This prevents rendering invisible slivers for instant transitions
+			if (duration < 0.01) return;
+			
 			const el = document.createElement('div');
 			el.className = `timeline-item type-${wp.type.toLowerCase()}`;
 			
@@ -17,7 +23,6 @@ export const initGameTimeline = (playerManager) => {
 			}
 			
 			// --- CHANGED: Strict Proportional Width ---
-			const duration = wp.duration || 0;
 			const percent = (duration / MAX_DURATION) * 100;
 			el.style.width = `${percent}%`;
 			// Removed flex-grow to ensure empty space remains empty
@@ -58,8 +63,8 @@ export const initGameTimeline = (playerManager) => {
 			container.appendChild(el);
 		});
 	};
-	
-	// Subscribe to player updates
+
+// Subscribe to player updates
 	playerManager.onWaypointsChanged.add((waypoints) => {
 		render(waypoints);
 	});

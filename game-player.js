@@ -1,5 +1,4 @@
 import * as BABYLON from 'babylonjs';
-
 export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const playerHeight = 4;
 	const playerRadius = 1;
@@ -8,8 +7,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
 	playerRoot.position.set(0, 5, 0);
 	playerRoot.visibility = 0;
-	
-	// 2. Player Visual (Visible Mesh) - Child of Root
+
+// 2. Player Visual (Visible Mesh) - Child of Root
 	const playerVisual = BABYLON.MeshBuilder.CreateCapsule('playerVisual', { height: playerHeight, radius: playerRadius }, scene);
 	playerVisual.parent = playerRoot;
 	
@@ -17,8 +16,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0);
 	playerVisual.material = playerMat;
 	shadowGenerator.addShadowCaster(playerVisual);
-	
-	// Direction Indicator
+
+// Direction Indicator
 	const cap = BABYLON.MeshBuilder.CreateBox('playerCap', { width: 0.8, height: 0.2, depth: 0.5 }, scene);
 	cap.parent = playerVisual;
 	cap.position.set(0, 1.5, 0.6);
@@ -26,8 +25,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	capMat.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.3);
 	cap.material = capMat;
 	shadowGenerator.addShadowCaster(cap);
-	
-	// 3. Physics
+
+// 3. Physics
 	const playerAgg = new BABYLON.PhysicsAggregate(
 		playerRoot,
 		BABYLON.PhysicsShapeType.CAPSULE,
@@ -35,8 +34,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		scene
 	);
 	playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(0, 0, 0) });
-	
-	// --- Controls ---
+
+// --- Controls ---
 	const inputMap = {};
 	scene.onKeyboardObservable.add((kbInfo) => {
 		const type = kbInfo.type;
@@ -51,20 +50,20 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const speed = 8.0;
 	const jumpForce = 6.0;
 	const rotationSpeed = 0.05;
-	
-	// --- Waypoint System ---
+
+// --- Waypoint System ---
 	let waypoints = [];
 	const onWaypointsChanged = new BABYLON.Observable();
 	
 	let isInputEnabled = true;
 	let isMoving = false;
-	
-	// --- Time Recording ---
+
+// --- Time Recording ---
 	let recordedTime = 0;
 	const MAX_RECORDING_TIME = 5.0;
 	const FIRE_COST = 0.5; // Time cost for firing
-	
-	// --- Replay State ---
+
+// --- Replay State ---
 	let animationState = 'NONE'; // 'NONE', 'REWIND', 'REPLAY'
 	
 	let rewindState = {
@@ -88,8 +87,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		onComplete: null,
 		onProgress: null
 	};
-	
-	// --- Helper: Add Waypoint ---
+
+// --- Helper: Add Waypoint ---
 	const addWaypoint = (type, data = {}) => {
 		// --- CHANGED: Apply cost for actions ---
 		if (type === 'FIRE') {
@@ -117,8 +116,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		waypoints.push(wp);
 		onWaypointsChanged.notifyObservers(waypoints);
 	};
-	
-	// --- Helper: Remove Waypoint (Undo) ---
+
+// --- Helper: Remove Waypoint (Undo) ---
 	const removeWaypoint = (index) => {
 		if (index <= 0 || index !== waypoints.length - 1) return;
 		
@@ -128,18 +127,37 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		// Reset State to Previous Block
 		recordedTime = newLastWp.timestamp;
 		
-		playerAgg.body.setTargetTransform(newLastWp.position, playerRoot.rotationQuaternion);
+		// --- CHANGED: Teleport Dynamic Body Correctly ---
+		// 1. Temporarily allow the Mesh to drive the Physics Body
+		// This prevents the physics engine from overwriting our manual position change
+		playerAgg.body.disablePreStep = false;
+		
+		// 2. Move the Mesh to the target position
+		playerRoot.position.copyFrom(newLastWp.position);
+		
+		// 3. Reset velocities to stop any previous momentum
 		playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
 		playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
+		
+		// 4. Restore visual rotation
 		playerVisual.rotation.y = newLastWp.rotation;
+		
+		// 5. Re-enable Physics driving the Mesh
+		// We must wait for one physics step to occur so the body picks up the new position
+		// from the mesh before we hand control back to the physics engine.
+		scene.onAfterPhysicsObservable.addOnce(() => {
+			if (playerAgg.body) {
+				playerAgg.body.disablePreStep = true;
+			}
+		});
 		
 		newLastWp.duration = 0;
 		isInputEnabled = true;
 		
 		onWaypointsChanged.notifyObservers(waypoints);
 	};
-	
-	// --- Main Loop ---
+
+// --- Main Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body) return;
 		
@@ -190,8 +208,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		
 		handleInputAndRecording();
 	});
-	
-	// --- Input Handler ---
+
+// --- Input Handler ---
 	const handleInputAndRecording = () => {
 		const camera = cameraManager.getActiveCamera();
 		const isFirstPerson = (camera.name === 'firstPersonCam');
@@ -272,8 +290,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 			}
 		}
 	};
-	
-	// --- Replay Logic Implementation ---
+
+// --- Replay Logic Implementation ---
 	const setupReplaySegment = (index) => {
 		if (index >= waypoints.length - 1) {
 			animationState = 'NONE';
@@ -351,8 +369,42 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 				lastWp.duration = recordedTime - lastWp.timestamp;
 			}
 			
-			// Note: We do NOT add a WAIT segment anymore because we only replay recorded actions.
-			// The replay will simply end when actions run out.
+			// --- NEW: Add Idle/Wait Block if time remains ---
+			const remaining = MAX_RECORDING_TIME - recordedTime;
+			// Use a small epsilon to avoid creating blocks for micro-fractions
+			if (remaining > 0.01) {
+				// Create a start point for the wait segment
+				// It shares the position/rotation of the last waypoint
+				const waitStart = {
+					type: 'WAIT',
+					position: lastWp ? lastWp.position.clone() : playerRoot.absolutePosition.clone(),
+					rotation: lastWp ? lastWp.rotation : playerVisual.rotation.y,
+					timestamp: recordedTime,
+					duration: remaining
+				};
+				
+				// Create the end point
+				const waitEnd = {
+					type: 'WAIT',
+					position: waitStart.position.clone(),
+					rotation: waitStart.rotation,
+					timestamp: MAX_RECORDING_TIME,
+					duration: 0
+				};
+				
+				// If there was a previous waypoint, its duration to the waitStart is 0
+				// (Since waitStart is at the same time as recordedTime)
+				if (lastWp) {
+					lastWp.duration = 0;
+				}
+				
+				waypoints.push(waitStart);
+				waypoints.push(waitEnd);
+				
+				// Update recorded time to full
+				recordedTime = MAX_RECORDING_TIME;
+			}
+			// ------------------------------------------------
 			
 			onWaypointsChanged.notifyObservers(waypoints);
 			
