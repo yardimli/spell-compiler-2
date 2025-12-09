@@ -21,6 +21,9 @@ const engine = new BABYLON.Engine(canvas, true);
 const timerSpinner = document.getElementById('timer-spinner');
 const timerText = document.getElementById('timer-text');
 const btnEndTurn = document.getElementById('btn-end-turn');
+// Stats UI
+const scoreDisplay = document.getElementById('score-display');
+const livesDisplay = document.getElementById('lives-display');
 
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
@@ -34,8 +37,9 @@ const createScene = async function () {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// 1. Scene (Maze)
-	const { shadowGenerator } = initGameScene(scene);
+	// 1. Scene (Maze) - Returns gems now
+	const { shadowGenerator, gems } = initGameScene(scene);
+	
 	// 2. Enemies (Replaces Alt Scene)
 	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator);
 	
@@ -52,6 +56,64 @@ const createScene = async function () {
 	
 	// 5. Timeline UI
 	const timelineManager = initGameTimeline(playerManager);
+	
+	// Game State Logic
+	let score = 0;
+	let lives = 3;
+	
+	const updateStatsUI = () => {
+		scoreDisplay.innerText = `SCORE: ${score}`;
+		livesDisplay.innerText = `LIVES: ${lives}`;
+	};
+	
+	// Gem Collection Loop
+	scene.onBeforeRenderObservable.add(() => {
+		// --- CHANGED: Only collect gems during REPLAY phase ---
+		if (playerManager.getPlaybackState() !== 'REPLAY') return;
+		
+		if (!playerRoot || gems.length === 0) return;
+		
+		const playerPos = playerRoot.absolutePosition;
+		
+		for (let i = gems.length - 1; i >= 0; i--) {
+			const gem = gems[i];
+			if (gem.isDisposed()) {
+				gems.splice(i, 1);
+				continue;
+			}
+			
+			// Simple distance check for collection
+			if (BABYLON.Vector3.Distance(playerPos, gem.position) < 2.0) {
+				gem.dispose();
+				gems.splice(i, 1);
+				score += 100;
+				updateStatsUI();
+			}
+		}
+	});
+	
+	// Win Condition
+	playerManager.setOnWin(() => {
+		alert(`YOU WIN! Final Score: ${score}`);
+		// Reset Game
+		location.reload();
+	});
+	
+	// Lose Condition (Ghost Catch)
+	sceneAltManager.setOnPlayerCaught(() => {
+		lives--;
+		updateStatsUI();
+		
+		if (lives <= 0) {
+			alert(`GAME OVER! Final Score: ${score}`);
+			location.reload();
+		} else {
+			// Respawn Player
+			playerManager.respawn();
+			// Reset Turn
+			startTurn();
+		}
+	});
 	
 	// 6. Turn Logic
 	const TURN_DURATION = 30;

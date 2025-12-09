@@ -5,9 +5,10 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	canvas.oncontextmenu = (e) => { e.preventDefault(); };
 	
 	// 1. Follow Camera (Third Person)
-	const followCam = new BABYLON.ArcRotateCamera('followCam', -Math.PI / 2, Math.PI / 2.5, 20, new BABYLON.Vector3(0, 0, 0), scene);
+	const followCam = new BABYLON.ArcRotateCamera('followCam', -Math.PI / 2, Math.PI / 2.5, 20, new BABYLON.Vector3(0, 20, 0), scene);
 	followCam.wheelPrecision = 50;
 	followCam.lowerBetaLimit = 0.1;
+	followCam.beta = 0.5;
 	followCam.upperBetaLimit = (Math.PI / 2) - 0.1;
 	followCam.lowerRadiusLimit = 5;
 	followCam.upperRadiusLimit = 50;
@@ -48,7 +49,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 		if (scene.activeCamera === followCam) {
 			// Smooth follow target
 			const targetPos = playerRoot.position.clone();
-			targetPos.y += 1.0;
+			targetPos.y += 11.0;
 			followCam.setTarget(BABYLON.Vector3.Lerp(followCam.getTarget(), targetPos, 0.1));
 		} else if (scene.activeCamera === firstPersonCam) {
 			// Snap to player head

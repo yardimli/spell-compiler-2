@@ -11,9 +11,9 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
 	
-	// --- CHANGED: Move player spawn out of the central ghost pen ---
 	// Spawning at Z = -12 (2 tiles down from center) to avoid immediate collision with ghosts
-	playerRoot.position.set(0, 5, -12);
+	const startPosition = new BABYLON.Vector3(0, 1.5, -12);
+	playerRoot.position.copyFrom(startPosition);
 	playerRoot.visibility = 0;
 	
 	// 2. Player Visual (Visible Mesh) - Child of Root
@@ -57,6 +57,9 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	const recordingModule = initGamePlayerRecording(scene, playerRoot, playerVisual, playerAgg, cameraManager, config);
 	const playbackModule = initGamePlayerPlayback(scene, playerRoot, playerVisual, playerAgg, playerMat);
 	
+	// --- Win Condition Callback ---
+	let onWinCallback = null;
+	
 	// --- Main Loop ---
 	scene.onBeforeRenderObservable.add(() => {
 		const state = playbackModule.getState();
@@ -67,6 +70,15 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		} else {
 			// Playback Phase
 			playbackModule.update();
+		}
+		
+		// Check if inside Ghost Pen (Win Condition)
+		// Pen area approx: x[-3, 3], z[-2, 2]
+		if (onWinCallback) {
+			const pos = playerRoot.absolutePosition;
+			if (pos.x > -2 && pos.x < 2 && pos.z > -1 && pos.z < 1) {
+				onWinCallback();
+			}
 		}
 	});
 	
@@ -91,6 +103,34 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 		resolveTurnWithWaypoints: (fireCallback, onReplayStart, onComplete, onProgress) => {
 			const finalWaypoints = recordingModule.finalizeWaypoints();
 			playbackModule.startSequence(finalWaypoints, fireCallback, onReplayStart, onComplete, onProgress);
-		}
+		},
+		
+		// Respawn Logic
+		respawn: () => {
+			// Reset position
+			playerAgg.body.disablePreStep = false;
+			playerRoot.position.copyFrom(startPosition);
+			playerRoot.rotationQuaternion = BABYLON.Quaternion.Identity();
+			playerVisual.rotation.y = 0;
+			
+			// Reset Physics
+			playerAgg.body.setLinearVelocity(BABYLON.Vector3.Zero());
+			playerAgg.body.setAngularVelocity(BABYLON.Vector3.Zero());
+			
+			// Reset Recording State
+			recordingModule.reset();
+			
+			// Ensure physics sync
+			scene.onAfterPhysicsObservable.addOnce(() => {
+				if (playerAgg.body) {
+					playerAgg.body.disablePreStep = true;
+				}
+			});
+		},
+		
+		setOnWin: (cb) => { onWinCallback = cb; },
+		
+		// --- NEW: Expose Playback State ---
+		getPlaybackState: () => playbackModule.getState()
 	};
 };

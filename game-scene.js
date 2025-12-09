@@ -60,30 +60,29 @@ export const initGameScene = (scene) => {
 	
 	// --- Maze Generation ---
 	// 1 = Wall, 0 = Path
-	// --- CHANGED: Added 2 layers of outer walls (padding) ---
 	const mazeMap = [
-		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // Row 0: Top Border
-		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 1: Top Path
-		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 2: Top Blocks
-		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 3: Top Blocks (Thick)
-		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 4: Horizontal Path
-		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 5: T-Junctions & L-Shapes
-		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 6: Path
-		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 7: Walls curving in
-		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 8: Path around Center
-		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 9: Ghost House Top (Door in middle)
-		[1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1], // Row 10: Ghost House Inside
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // Row 0
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 1
+		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 2
+		[1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], // Row 3
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 4
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 5
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 6
+		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 7
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 8
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 9: Ghost House Top
+		[1, 0, 1, 1, 1, 0, 0, 0, 1,'A','B','C', 1, 0, 0, 0, 1, 1, 1, 0, 1], // Row 10: Ghost House Inside
 		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 11: Ghost House Bottom
-		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 12: Path
-		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 13: Walls curving out
-		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 14: Horizontal Path
-		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 15: Lower T-Junctions
-		[1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1], // Row 16: Lower Path Split
-		[1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1], // Row 17: Bottom L-Shapes
-		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 18: Path
-		[1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1], // Row 19: Bottom Blocks
-		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 20: Bottom Path
-		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  // Row 21: Bottom Border
+		[1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Row 12
+		[1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1], // Row 13
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 14
+		[1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1], // Row 15
+		[1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1], // Row 16
+		[1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1], // Row 17
+		[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 18
+		[1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1], // Row 19
+		[1,'P', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], // Row 20
+		[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  // Row 21
 	];
 	
 	const wallMat = new BABYLON.StandardMaterial('wallMat', scene);
@@ -161,5 +160,70 @@ export const initGameScene = (scene) => {
 		}
 	}
 	
-	return { shadowGenerator, groundSize };
+	// --- NEW: Spawn Gems ---
+	const gems = [];
+	const gemMat = new BABYLON.StandardMaterial('gemMat', scene);
+	gemMat.diffuseColor = new BABYLON.Color3(1, 0.84, 0); // Gold
+	gemMat.emissiveColor = new BABYLON.Color3(0.5, 0.4, 0);
+	
+	// Define Ghost Pen area (Rows 9-11, Cols ~6-14) to exclude gems
+	const isGhostPen = (r, c) => {
+		return (r >= 9 && r <= 11 && c >= 6 && c <= 14);
+	};
+	
+	for (let r = 0; r < rows; r++) {
+		for (let c = 0; c < cols; c++) {
+			// If path (0) and not in ghost pen
+			if (mazeMap[r][c] === 0 && !isGhostPen(r, c)) {
+				const posX = startX + c * tileSize;
+				const posZ = startZ - r * tileSize;
+				
+				const gem = BABYLON.MeshBuilder.CreateSphere(`gem_${r}_${c}`, { diameter: 0.8 }, scene);
+				gem.position = new BABYLON.Vector3(posX, 1.0, posZ);
+				gem.material = gemMat;
+				
+				// Simple floating animation
+				scene.registerBeforeRender(() => {
+					gem.rotation.y += 0.02;
+					gem.position.y = 1.0 + Math.sin(performance.now() * 0.003) * 0.2;
+				});
+				
+				gems.push(gem);
+			}
+		}
+	}
+	
+	// --- NEW: Floor Markers (A, B, C, D, P) ---
+	const createMarker = (text, position, color) => {
+		const plane = BABYLON.MeshBuilder.CreatePlane('marker_' + text, { size: 2 }, scene);
+		plane.position = position.clone();
+		plane.position.y = 0.05; // Slightly above ground
+		plane.rotation.x = Math.PI / 2;
+		
+		const dt = new BABYLON.DynamicTexture('dt_' + text, { width: 128, height: 128 }, scene);
+		dt.hasAlpha = true;
+		const ctx = dt.getContext();
+		ctx.font = 'bold 80px Arial';
+		ctx.fillStyle = color;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillText(text, 64, 64);
+		dt.update();
+		
+		const mat = new BABYLON.StandardMaterial('mat_' + text, scene);
+		mat.diffuseTexture = dt;
+		mat.useAlphaFromDiffuseTexture = true;
+		mat.specularColor = BABYLON.Color3.Black();
+		mat.emissiveColor = BABYLON.Color3.White();
+		plane.material = mat;
+	};
+	
+	// Marker Positions (Matching game-scene-alt.js and game-player.js)
+	createMarker('A', new BABYLON.Vector3(0, 0, 2), '#FF0000');   // Blinky
+	createMarker('B', new BABYLON.Vector3(-3, 0, 0), '#FFB8FF');  // Pinky
+	createMarker('C', new BABYLON.Vector3(3, 0, 0), '#00FFFF');   // Inky
+	createMarker('D', new BABYLON.Vector3(0, 0, -2), '#FFB852');  // Clyde
+	createMarker('P', new BABYLON.Vector3(0, 0, -12), '#00FF00'); // Player
+	
+	return { shadowGenerator, groundSize, gems };
 };

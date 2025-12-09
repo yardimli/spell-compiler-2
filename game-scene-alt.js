@@ -103,7 +103,6 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 	};
 	
 	// Enemy Definitions
-	// --- CHANGED: Spread out spawn positions to prevent overlap with larger bodies ---
 	// TileSize is 6. Center is (0,0).
 	const enemyTypes = [
 		{ name: 'Blinky', color: new BABYLON.Color3(1, 0, 0), startPos: new BABYLON.Vector3(0, 2, 2) },
@@ -111,6 +110,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		{ name: 'Inky', color: new BABYLON.Color3(0, 1, 1), startPos: new BABYLON.Vector3(3, 2, 0) },
 		{ name: 'Clyde', color: new BABYLON.Color3(1, 0.5, 0), startPos: new BABYLON.Vector3(0, 2, -2) }
 	];
+	
+	// --- NEW: Callback for player caught ---
+	let onPlayerCaughtCallback = null;
 	
 	enemyTypes.forEach((def) => {
 		const visual = createGhostMesh(def.name, def.color, def.startPos);
@@ -154,6 +156,11 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 			if (!other) return;
 			
 			if (other.name.includes('player') || other.name.includes('Root')) {
+				// --- CHANGED: Trigger Game Over / Life Loss instead of bounce ---
+				if (onPlayerCaughtCallback) {
+					onPlayerCaughtCallback();
+				}
+				// Bounce slightly to prevent sticking while resetting
 				enemyData.currentDir = enemyData.currentDir.scale(-1);
 			}
 		});
@@ -243,6 +250,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 			} else {
 				playbackModule.unfreezeEnemies(enemies);
 			}
-		}
+		},
+		// --- NEW: Setter for callback ---
+		setOnPlayerCaught: (cb) => { onPlayerCaughtCallback = cb; }
 	};
 };

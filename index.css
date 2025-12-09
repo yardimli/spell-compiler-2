@@ -1,6 +1,27 @@
 body { margin: 0; overflow: hidden; }
 canvas { width: 100%; height: 100%; touch-action: none; }
 
+/* --- NEW: Game Stats --- */
+#game-stats {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 10;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    color: #ffd700; /* Gold color */
+    text-shadow: 2px 2px 0 #000;
+    font-size: 24px;
+    pointer-events: none;
+}
+
+#lives-display {
+    color: #ff4444; /* Red for lives */
+}
+
 /* --- Power Meter UI --- */
 #power-container {
     position: absolute;
