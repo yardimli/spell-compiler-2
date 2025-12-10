@@ -1,14 +1,22 @@
 import * as BABYLON from 'babylonjs';
-import { initGamePlayerRecording } from './game-player-recording';
-import { initGamePlayerPlayback } from './game-player-playback';
 
-export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
+export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition) => {
 	const playerHeight = 4;
 	const playerRadius = 1;
+	const speed = 15.0;
+	const jumpForce = 8.0;
+	const rotationSpeed = 0.05;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
-	playerRoot.position.set(0, 5, 0);
+	
+	// Use the passed start position, or default if null
+	if (startPosition) {
+		playerRoot.position.copyFrom(startPosition);
+	} else {
+		playerRoot.position.set(0, 5, 0);
+	}
+	
 	playerRoot.visibility = 0;
 	
 	// 2. Player Visual (Visible Mesh) - Child of Root
@@ -38,54 +46,85 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager) => {
 	);
 	playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(0, 0, 0) });
 	
-	// --- Configuration ---
-	const config = {
-		speed: 8.0,
-		jumpForce: 6.0,
-		rotationSpeed: 0.05,
-		playerHeight,
-		MAX_RECORDING_TIME: 5.0,
-		FIRE_COST: 0.5
-	};
+	// --- Input Handling (Real-time) ---
+	const inputMap = {};
 	
-	// --- Initialize Sub-Modules ---
-	const recordingModule = initGamePlayerRecording(scene, playerRoot, playerVisual, playerAgg, cameraManager, config);
-	const playbackModule = initGamePlayerPlayback(scene, playerRoot, playerVisual, playerAgg, playerMat);
-	
-	// --- Main Loop ---
-	scene.onBeforeRenderObservable.add(() => {
-		const state = playbackModule.getState();
-		
-		if (state === 'NONE') {
-			// Recording / Input Phase
-			recordingModule.update();
-		} else {
-			// Playback Phase
-			playbackModule.update();
+	scene.onKeyboardObservable.add((kbInfo) => {
+		const type = kbInfo.type;
+		const key = kbInfo.event.key.toLowerCase();
+		if (type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+			inputMap[key] = true;
+		} else if (type === BABYLON.KeyboardEventTypes.KEYUP) {
+			inputMap[key] = false;
 		}
 	});
 	
-	// --- Public API ---
+	// --- Main Update Loop ---
+	scene.onBeforeRenderObservable.add(() => {
+		if (!playerAgg.body) return;
+		
+		const camera = cameraManager.getActiveCamera();
+		const isFirstPerson = (camera.name === 'firstPersonCam');
+		
+		// Hide/Show Cap based on camera
+		if (cap) cap.setEnabled(!isFirstPerson);
+		
+		let moveDir = new BABYLON.Vector3(0, 0, 0);
+		
+		// Direction Calculation
+		if (isFirstPerson) {
+			// FPS Rotation
+			if (inputMap['a']) playerVisual.rotation.y -= rotationSpeed;
+			if (inputMap['d']) playerVisual.rotation.y += rotationSpeed;
+			
+			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
+			forward.y = 0; forward.normalize();
+			const right = playerVisual.getDirection(BABYLON.Vector3.Right());
+			right.y = 0; right.normalize();
+			
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['e']) ? 1 : 0; x -= (inputMap['q']) ? 1 : 0;
+			moveDir = forward.scale(z).add(right.scale(x));
+		} else {
+			// TPS / Free Cam Movement relative to camera view
+			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
+			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
+			
+			if (z !== 0 || x !== 0) {
+				const camForward = camera.getDirection(BABYLON.Vector3.Forward());
+				camForward.y = 0; camForward.normalize();
+				const camRight = camera.getDirection(BABYLON.Vector3.Right());
+				camRight.y = 0; camRight.normalize();
+				moveDir = camForward.scale(z).add(camRight.scale(x));
+			}
+		}
+		
+		const isJumping = inputMap[' '];
+		
+		// Physics Application
+		if (moveDir.length() > 0) moveDir.normalize();
+		const currentVel = new BABYLON.Vector3();
+		playerAgg.body.getLinearVelocityToRef(currentVel);
+		const targetVelocity = moveDir.scale(speed);
+		
+		// Raycast for ground check
+		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
+		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
+		
+		let yVel = currentVel.y;
+		if (isJumping && hit.hit) yVel = jumpForce;
+		
+		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
+		
+		// Visual Rotation (Third Person)
+		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
+			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
+			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 0.2);
+		}
+	});
+	
 	return {
 		playerRoot,
-		playerVisual,
-		
-		// Expose Recording API
-		onWaypointsChanged: recordingModule.onWaypointsChanged,
-		getRecordedTime: recordingModule.getRecordedTime,
-		addWaypoint: recordingModule.addWaypoint,
-		removeWaypoint: recordingModule.removeWaypoint,
-		startTurn: recordingModule.reset,
-		disableInput: recordingModule.disableInput,
-		
-		// Constants
-		MAX_RECORDING_TIME: config.MAX_RECORDING_TIME,
-		FIRE_COST: config.FIRE_COST,
-		
-		// Orchestration
-		resolveTurnWithWaypoints: (fireCallback, onReplayStart, onComplete, onProgress) => {
-			const finalWaypoints = recordingModule.finalizeWaypoints();
-			playbackModule.startSequence(finalWaypoints, fireCallback, onReplayStart, onComplete, onProgress);
-		}
+		playerVisual
 	};
 };

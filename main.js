@@ -8,7 +8,6 @@ import { initGameSceneAlt } from './game-scene-alt';
 import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
-import { initGameTimeline } from './game-timeline';
 
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
@@ -16,11 +15,6 @@ const havokWasmUrl = './HavokPhysics.wasm';
 
 const canvas = document.getElementById('renderCanvas');
 const engine = new BABYLON.Engine(canvas, true);
-
-// UI Elements
-const timerSpinner = document.getElementById('timer-spinner');
-const timerText = document.getElementById('timer-text');
-const btnEndTurn = document.getElementById('btn-end-turn');
 
 const createScene = async function () {
 	const scene = new BABYLON.Scene(engine);
@@ -34,91 +28,29 @@ const createScene = async function () {
 		console.error('Failed to initialize physics:', e);
 	}
 	
-	// 1. Scene
-	const { shadowGenerator } = initGameScene(scene);
-	const sceneAltManager = await initGameSceneAlt(scene, shadowGenerator);
+	// 1. Scene (Load Map)
+	// initGameScene is now async and returns map data
+	const { shadowGenerator, playerStartPosition, ballSpawns } = await initGameScene(scene);
 	
-	// 2. Player & Camera
+	// 2. Scene Alt (Balls)
+	// Pass the ball spawns from the map
+	await initGameSceneAlt(scene, shadowGenerator, ballSpawns);
+	
+	// 3. Player & Camera
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
-	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef);
+	
+	// Pass playerStartPosition from map
+	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition);
 	const { playerRoot, playerVisual } = playerManager;
 	
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	
-	// 3. Fire System (Pass playerManager to add waypoints)
-	const fireManager = initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, playerManager);
+	// 4. Fire System (Real-time)
+	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
 	
-	// 4. Timeline UI
-	const timelineManager = initGameTimeline(playerManager);
-	
-	// 5. Turn Logic
-	// --- CHANGED: Turn duration remains 30 seconds for thinking time ---
-	const TURN_DURATION = 30;
-	let timeLeft = TURN_DURATION;
-	let timerInterval = null;
-	let isTurnPhase = false;
-	
-	const updateTimerUI = () => {
-		timerText.innerText = Math.ceil(timeLeft);
-		const percentage = (timeLeft / TURN_DURATION) * 100;
-		timerSpinner.style.background = `conic-gradient(#00ff00 ${percentage}%, #333 0%)`;
-		if (timeLeft <= 5) timerSpinner.style.background = `conic-gradient(#ff0000 ${percentage}%, #333 0%)`;
-	};
-	
-	const startTurn = () => {
-		isTurnPhase = true;
-		timeLeft = TURN_DURATION;
-		updateTimerUI();
-		btnEndTurn.disabled = false;
-		
-		sceneAltManager.setBallsFrozen(true);
-		playerManager.startTurn();
-		fireManager.setTurnActive(true);
-		
-		if (timerInterval) clearInterval(timerInterval);
-		timerInterval = setInterval(() => {
-			timeLeft--;
-			updateTimerUI();
-			if (timeLeft <= 0) endTurn();
-		}, 1000);
-	};
-	
-	const endTurn = () => {
-		if (!isTurnPhase) return;
-		isTurnPhase = false;
-		clearInterval(timerInterval);
-		btnEndTurn.disabled = true;
-		
-		playerManager.disableInput();
-		fireManager.setTurnActive(false);
-		
-		canvas.focus();
-		
-		// Resolve Turn: Rewind -> Replay Waypoints
-		playerManager.resolveTurnWithWaypoints(
-			// Fire Callback (Replay Phase)
-			(waypointData) => {
-				fireManager.fireFromWaypoint(waypointData);
-			},
-			// On Replay Start (Rewind Complete)
-			() => {
-				sceneAltManager.setBallsFrozen(false);
-			},
-			// On Complete
-			() => {
-				startTurn();
-			},
-			// On Progress (Update Timeline UI)
-			// --- CHANGED: Accept progress value ---
-			(index, progress) => {
-				timelineManager.updateProgress(index, progress);
-			}
-		);
-	};
-	
-	btnEndTurn.addEventListener('click', endTurn);
-	startTurn();
+	// Focus canvas so keyboard events (WASD) work immediately
+	canvas.focus();
 	
 	return scene;
 };

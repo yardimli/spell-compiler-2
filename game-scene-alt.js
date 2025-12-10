@@ -1,8 +1,6 @@
 import * as BABYLON from 'babylonjs';
-import { initGameSceneAltRecording } from './game-scene-alt-recording';
-import { initGameSceneAltPlayback } from './game-scene-alt-playback';
 
-export const initGameSceneAlt = async (scene, shadowGenerator) => {
+export const initGameSceneAlt = async (scene, shadowGenerator, ballSpawns) => {
 	// --- 3D Text ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	try {
@@ -15,7 +13,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		
 		const textMesh = BABYLON.MeshBuilder.CreateText(
 			'text',
-			'Hello World',
+			'REALTIME',
 			fontData,
 			{ size: 2, depth: 0.5, resolution: 64 },
 			scene
@@ -37,8 +35,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		textMesh.bakeCurrentTransformIntoVertices();
 		
 		textMesh.position.y = 12;
-		textMesh.position.x = 6;
-		textMesh.position.z = 16;
+		textMesh.position.x = 0;
+		textMesh.position.z = 0;
 		
 		const textAgg = new BABYLON.PhysicsAggregate(
 			textMesh,
@@ -58,45 +56,43 @@ export const initGameSceneAlt = async (scene, shadowGenerator) => {
 		console.error('Failed to create 3D text:', e);
 	}
 	
-	// --- Bouncing Balls (Environment) ---
-	const ballCount = 10;
-	const ballAggregates = [];
-	
-	for (let i = 0; i < ballCount; i++) {
-		const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere${i}`, { diameter: 1.5 }, scene);
-		sphere.position.x = (Math.random() * 40) - 20;
-		sphere.position.z = (Math.random() * 40) - 20;
-		sphere.position.y = 10 + Math.random() * 5;
-		
-		const ballMat = new BABYLON.StandardMaterial(`ballMat${i}`, scene);
-		ballMat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-		ballMat.specularColor = new BABYLON.Color3(1, 1, 1);
-		ballMat.specularPower = 64;
-		sphere.material = ballMat;
-		
-		shadowGenerator.addShadowCaster(sphere);
-		
-		const agg = new BABYLON.PhysicsAggregate(
-			sphere,
-			BABYLON.PhysicsShapeType.SPHERE,
-			{ mass: 1, restitution: 0.9, friction: 0.2 },
-			scene
-		);
-		ballAggregates.push(agg);
+	// --- Spawn Balls from Map Data ---
+	if (ballSpawns && ballSpawns.length > 0) {
+		ballSpawns.forEach((spawn, index) => {
+			const sphere = BABYLON.MeshBuilder.CreateSphere(`sphere_${index}`, { diameter: 1.5 }, scene);
+			sphere.position = spawn.position.clone();
+			
+			const ballMat = new BABYLON.StandardMaterial(`ballMat_${index}`, scene);
+			
+			// Color based on type (2, 3, 4)
+			switch (spawn.type) {
+				case 2:
+					ballMat.diffuseColor = new BABYLON.Color3(1, 0, 0); // Red
+					break;
+				case 3:
+					ballMat.diffuseColor = new BABYLON.Color3(0, 1, 0); // Green
+					break;
+				case 4:
+					ballMat.diffuseColor = new BABYLON.Color3(0, 0, 1); // Blue
+					break;
+				default:
+					ballMat.diffuseColor = new BABYLON.Color3(1, 1, 1);
+			}
+			
+			ballMat.specularColor = new BABYLON.Color3(1, 1, 1);
+			ballMat.specularPower = 64;
+			sphere.material = ballMat;
+			
+			shadowGenerator.addShadowCaster(sphere);
+			
+			new BABYLON.PhysicsAggregate(
+				sphere,
+				BABYLON.PhysicsShapeType.SPHERE,
+				{ mass: 1, restitution: 0.9, friction: 0.2 },
+				scene
+			);
+		});
 	}
 	
-	// --- Initialize Sub-Modules ---
-	const recordingModule = initGameSceneAltRecording();
-	const playbackModule = initGameSceneAltPlayback();
-	
-	// --- Control Function ---
-	return {
-		setBallsFrozen: (isFrozen) => {
-			if (isFrozen) {
-				recordingModule.freezeBalls(ballAggregates);
-			} else {
-				playbackModule.unfreezeBalls(ballAggregates);
-			}
-		}
-	};
+	return {};
 };
