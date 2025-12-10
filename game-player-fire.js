@@ -8,6 +8,11 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
 	const targetColor = new BABYLON.Color3(0, 1, 1); // Cyan highlight
 	
+	// --- Smooth Turn State ---
+	let isTurning = false;
+	let targetRotation = 0;
+	let pendingShot = false;
+	
 	const setTarget = (mesh) => {
 		if (currentTarget) highlightLayer.removeMesh(currentTarget);
 		
@@ -25,7 +30,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const createExplosion = (position, color = null) => {
 		const fragmentCount = 8;
 		for (let i = 0; i < fragmentCount; i++) {
-			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', { type: 1, size: 0.3 }, scene);
+			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', {
+				type: 1,
+				size: 0.3
+			}, scene);
 			frag.position = position.clone();
 			frag.position.addInPlace(new BABYLON.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5));
 			
@@ -33,7 +41,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			fragMat.diffuseColor = color || new BABYLON.Color3(1, 0.5 + Math.random() * 0.5, 0);
 			frag.material = fragMat;
 			
-			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, { mass: 0.2, restitution: 0.5 }, scene);
+			const fragAgg = new BABYLON.PhysicsAggregate(frag, BABYLON.PhysicsShapeType.CONVEX_HULL, {
+				mass: 0.2,
+				restitution: 0.5
+			}, scene);
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
 			fragAgg.body.applyImpulse(dir.scale(5 + Math.random() * 5), frag.absolutePosition);
 			
@@ -56,7 +67,9 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// --- Bullet Spawning ---
 	const spawnBullet = () => {
-		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', { diameter: 0.4 }, scene);
+		const bullet = BABYLON.MeshBuilder.CreateSphere('bullet', {
+			diameter: 0.4
+		}, scene);
 		bullet.material = new BABYLON.StandardMaterial('bulletMat', scene);
 		bullet.material.diffuseColor = new BABYLON.Color3(1, 1, 0);
 		bullet.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0);
@@ -80,11 +93,19 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		shadowGenerator.addShadowCaster(bullet);
 		
 		const power = 20;
-		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
+		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, {
+			mass: 0.5,
+			restitution: 0.8
+		}, scene);
 		bulletAgg.body.setGravityFactor(0);
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
 		
-		const bulletData = { mesh: bullet, agg: bulletAgg, age: 0, isDead: false };
+		const bulletData = {
+			mesh: bullet,
+			agg: bulletAgg,
+			age: 0,
+			isDead: false
+		};
 		bullets.push(bulletData);
 		
 		bulletAgg.body.setCollisionCallbackEnabled(true);
@@ -103,7 +124,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					if (currentTarget === hitBody.transformNode) {
 						setTarget(null);
 					}
-					// hitBody.transformNode.dispose(); // Optional: Destroy target
 				}
 				bulletData.isDead = true;
 				bulletAgg.body.getCollisionObservable().remove(collisionObserver);
@@ -117,7 +137,14 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const dir = currentTarget.absolutePosition.subtract(playerVisual.absolutePosition);
 			// Calculate angle to target (Y rotation)
 			const angle = Math.atan2(dir.x, dir.z);
-			playerVisual.rotation.y = angle;
+			
+			// --- CHANGED: Setup smooth turn instead of instant snap ---
+			targetRotation = angle;
+			isTurning = true;
+			pendingShot = true; // Queue the shot to fire after turning
+		} else {
+			// If no target, just fire immediately
+			spawnBullet();
 		}
 	};
 	
@@ -128,30 +155,32 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const camera = cameraManager.getActiveCamera();
 			let pickedMesh = null;
 			
-			if (camera.name === 'firstPersonCam') {
-				// In First Person, cast a ray from the camera center
-				const ray = camera.getForwardRay(1000);
+			// --- CHANGED: Use Picking Ray from Mouse Position ---
+			// Previously we used camera.getForwardRay() which shoots from the center of the screen.
+			// If the mouse cursor is unlocked (which it is here), clicking off-center would still shoot center.
+			// scene.createPickingRay uses the actual mouse coordinates.
+			const ray = scene.createPickingRay(
+				scene.pointerX,
+				scene.pointerY,
+				BABYLON.Matrix.Identity(),
+				camera
+			);
+			
+			const hit = scene.pickWithRay(ray, (mesh) => {
+				// Ignore the player visual and any children (like the cap)
+				if (mesh === playerVisual || mesh.isDescendantOf(playerVisual)) return false;
+				// Ignore the player root (parent of visual)
+				if (mesh === playerVisual.parent) return false;
+				// Explicitly ignore playerRoot by name if reference check fails
+				if (mesh.name === 'playerRoot') return false;
+				// Ignore bullets
+				if (mesh.name === 'bullet') return false;
 				
-				// --- CHANGED: Filter out player meshes so we don't pick ourselves ---
-				const hit = scene.pickWithRay(ray, (mesh) => {
-					// Ignore the player visual and any children (like the cap)
-					if (mesh === playerVisual || mesh.isDescendantOf(playerVisual)) return false;
-					// Ignore the player root (parent of visual)
-					if (mesh === playerVisual.parent) return false;
-					// Ignore bullets
-					if (mesh.name === 'bullet') return false;
-					
-					return true;
-				});
-				
-				if (hit && hit.hit) {
-					pickedMesh = hit.pickedMesh;
-				}
-			} else {
-				// In Third Person / Free Cam, use the mouse cursor position
-				if (pointerInfo.pickInfo && pointerInfo.pickInfo.hit) {
-					pickedMesh = pointerInfo.pickInfo.pickedMesh;
-				}
+				return true;
+			});
+			
+			if (hit && hit.hit) {
+				pickedMesh = hit.pickedMesh;
 			}
 			
 			// Apply selection if we hit a sphere
@@ -164,18 +193,36 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onKeyboardObservable.add((kbInfo) => {
 		if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
 			if (kbInfo.event.key.toLowerCase() === 'f') {
-				// If we have a target, turn to face it first
-				if (currentTarget) {
-					faceTarget();
-				}
-				spawnBullet();
+				faceTarget();
 			}
 		}
 	});
 	
-	// --- Update Loop (Bullet Cleanup) ---
+	// --- Update Loop (Bullet Cleanup & Smooth Turn) ---
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
+		
+		// --- NEW: Smooth Turn Logic ---
+		if (isTurning) {
+			// Smoothly interpolate current rotation towards target
+			// Factor 3.0 * dt gives a slower, smoother turn.
+			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 3.0 * dt);
+			
+			// Check difference (handling wrapping)
+			let diff = targetRotation - playerVisual.rotation.y;
+			while (diff > Math.PI) diff -= 2 * Math.PI;
+			while (diff < -Math.PI) diff += 2 * Math.PI;
+			
+			if (Math.abs(diff) < 0.05) {
+				playerVisual.rotation.y = targetRotation;
+				isTurning = false;
+				
+				if (pendingShot) {
+					spawnBullet();
+					pendingShot = false;
+				}
+			}
+		}
 		
 		// Cleanup bullets
 		for (let i = bullets.length - 1; i >= 0; i--) {
