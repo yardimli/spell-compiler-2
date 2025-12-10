@@ -13,6 +13,34 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	let targetRotation = 0;
 	let pendingShot = false;
 	
+	// --- Crosshair Mesh (Babylon Objects) ---
+	const createCrosshair = () => {
+		const crosshairRoot = new BABYLON.TransformNode('crosshairRoot', scene);
+		
+		const mat = new BABYLON.StandardMaterial('crosshairMat', scene);
+		mat.emissiveColor = new BABYLON.Color3(1, 1, 1);
+		mat.disableLighting = true;
+		
+		// Horizontal line
+		const hLine = BABYLON.MeshBuilder.CreatePlane('hLine', { width: 0.05, height: 0.003 }, scene);
+		hLine.material = mat;
+		hLine.parent = crosshairRoot;
+		hLine.isPickable = false;
+		hLine.renderingGroupId = 1; // Render on top of scene (default is 0)
+		
+		// Vertical line
+		const vLine = BABYLON.MeshBuilder.CreatePlane('vLine', { width: 0.003, height: 0.05 }, scene);
+		vLine.material = mat;
+		vLine.parent = crosshairRoot;
+		vLine.isPickable = false;
+		vLine.renderingGroupId = 1;
+		
+		crosshairRoot.setEnabled(false);
+		return crosshairRoot;
+	};
+	
+	const crosshair = createCrosshair();
+	
 	const setTarget = (mesh) => {
 		if (currentTarget) highlightLayer.removeMesh(currentTarget);
 		
@@ -78,15 +106,24 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		spawnPos.y += 1.5;
 		
 		let aimDir;
+		const camera = cameraManager.getActiveCamera();
+		const isFPS = (camera.name === 'firstPersonCam');
 		
 		// Check if target exists and is valid
 		if (currentTarget && !currentTarget.isDisposed()) {
 			// Aim at target
 			aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
 		} else {
-			// Default: Aim forward based on player rotation
-			const rotationMatrix = BABYLON.Matrix.RotationY(playerVisual.rotation.y);
-			aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+			// FPS Aiming Logic
+			if (isFPS) {
+				// In FPS, aim where the camera is looking (center of screen)
+				// This handles looking up/down
+				aimDir = camera.getDirection(BABYLON.Vector3.Forward());
+			} else {
+				// Default (TPS): Aim forward based on player rotation (horizontal only)
+				const rotationMatrix = BABYLON.Matrix.RotationY(playerVisual.rotation.y);
+				aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+			}
 		}
 		
 		bullet.position = spawnPos.add(aimDir.scale(1.5));
@@ -138,7 +175,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			// Calculate angle to target (Y rotation)
 			const angle = Math.atan2(dir.x, dir.z);
 			
-			// --- CHANGED: Setup smooth turn instead of instant snap ---
+			// Setup smooth turn instead of instant snap
 			targetRotation = angle;
 			isTurning = true;
 			pendingShot = true; // Queue the shot to fire after turning
@@ -155,10 +192,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const camera = cameraManager.getActiveCamera();
 			let pickedMesh = null;
 			
-			// --- CHANGED: Use Picking Ray from Mouse Position ---
-			// Previously we used camera.getForwardRay() which shoots from the center of the screen.
-			// If the mouse cursor is unlocked (which it is here), clicking off-center would still shoot center.
-			// scene.createPickingRay uses the actual mouse coordinates.
+			// Use Picking Ray from Mouse Position
 			const ray = scene.createPickingRay(
 				scene.pointerX,
 				scene.pointerY,
@@ -175,6 +209,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				if (mesh.name === 'playerRoot') return false;
 				// Ignore bullets
 				if (mesh.name === 'bullet') return false;
+				// Ignore crosshair parts
+				if (mesh.name === 'hLine' || mesh.name === 'vLine') return false;
 				
 				return true;
 			});
@@ -183,9 +219,12 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				pickedMesh = hit.pickedMesh;
 			}
 			
-			// Apply selection if we hit a sphere
+			// Untarget if clicking nothing or non-target
 			if (pickedMesh && pickedMesh.name.startsWith('sphere')) {
 				setTarget(pickedMesh);
+			} else {
+				// If we clicked a wall, ground, or sky, clear the target
+				setTarget(null);
 			}
 		}
 	});
@@ -202,7 +241,25 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		
-		// --- NEW: Smooth Turn Logic ---
+		// --- Crosshair Visibility Logic ---
+		const camera = cameraManager.getActiveCamera();
+		const isFPS = (camera.name === 'firstPersonCam');
+		
+		// Show crosshair if in FPS mode AND no target is selected
+		if (isFPS && !currentTarget) {
+			if (!crosshair.isEnabled() || crosshair.parent !== camera) {
+				crosshair.setEnabled(true);
+				crosshair.parent = camera;
+				// Position 1 unit in front of camera
+				crosshair.position = new BABYLON.Vector3(0, 0, 1);
+				// Reset rotation to match camera orientation
+				crosshair.rotation = new BABYLON.Vector3(0, 0, 0);
+			}
+		} else {
+			crosshair.setEnabled(false);
+		}
+		
+		// Smooth Turn Logic
 		if (isTurning) {
 			// Smoothly interpolate current rotation towards target
 			// Factor 3.0 * dt gives a slower, smoother turn.

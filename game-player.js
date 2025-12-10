@@ -5,7 +5,13 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	const playerRadius = 1;
 	const speed = 15.0;
 	const jumpForce = 8.0;
-	const rotationSpeed = 0.05;
+	
+	// --- CHANGED: Dynamic Rotation Speed Parameters ---
+	// Start slow for fine adjustments, speed up for turning around
+	const minRotationSpeed = 0.01;
+	const maxRotationSpeed = 0.08;
+	const rotationAcceleration = 0.002; // How much speed increases per frame
+	let currentRotationSpeed = minRotationSpeed;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
@@ -73,9 +79,22 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		
 		// Direction Calculation
 		if (isFirstPerson) {
-			// FPS Rotation
-			if (inputMap['a']) playerVisual.rotation.y -= rotationSpeed;
-			if (inputMap['d']) playerVisual.rotation.y += rotationSpeed;
+			// --- CHANGED: Variable Speed Rotation Logic ---
+			const isTurningLeft = inputMap['a'];
+			const isTurningRight = inputMap['d'];
+			
+			if (isTurningLeft || isTurningRight) {
+				// Accelerate rotation speed if key is held
+				if (currentRotationSpeed < maxRotationSpeed) {
+					currentRotationSpeed += rotationAcceleration;
+				}
+				
+				if (isTurningLeft) playerVisual.rotation.y -= currentRotationSpeed;
+				if (isTurningRight) playerVisual.rotation.y += currentRotationSpeed;
+			} else {
+				// Reset to minimum speed when keys are released
+				currentRotationSpeed = minRotationSpeed;
+			}
 			
 			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
 			forward.y = 0; forward.normalize();
