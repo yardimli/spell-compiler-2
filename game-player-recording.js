@@ -9,6 +9,8 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 	let recordedTime = 0;
 	let isMoving = false;
 	let isInputEnabled = true;
+	// Track rotation state for snapping logic
+	let isRotating = false;
 	
 	// Observable for UI updates
 	const onWaypointsChanged = new BABYLON.Observable();
@@ -138,9 +140,21 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 			if (inputMap['d']) rotInput += 1;
 			if (inputMap['a']) rotInput -= 1;
 			
+			// Check for Shift key (Free Rotation Mode)
+			const isFreeRotation = inputMap['shift'];
+			
 			if (rotInput !== 0) {
 				playerVisual.rotation.y += rotInput * rotationSpeed;
 				hasInput = true;
+				isRotating = true;
+			} else if (isRotating) {
+				// Rotation key released this frame
+				isRotating = false;
+				if (!isFreeRotation) {
+					// Align with track: Snap to nearest 90 degrees (PI/2)
+					const snapInterval = Math.PI / 2;
+					playerVisual.rotation.y = Math.round(playerVisual.rotation.y / snapInterval) * snapInterval;
+				}
 			}
 			
 			// 2. Handle Movement (Relative to Player Facing)
@@ -154,9 +168,6 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 				forward.normalize();
 				moveDir = forward.scale(z);
 			}
-			
-			// Note: We removed the auto-rotate logic (Math.atan2) here.
-			// The player now only rotates via A/D keys or explicit targeting (handled in fire module).
 		}
 		
 		const isJumping = inputMap[' '];
@@ -209,6 +220,7 @@ export const initGamePlayerRecording = (scene, playerRoot, playerVisual, playerA
 			isMoving = false;
 			waypoints = [];
 			recordedTime = 0;
+			isRotating = false;
 			addWaypoint('MOVE', {timestamp: 0});
 		},
 		disableInput: () => {
