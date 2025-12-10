@@ -3,6 +3,24 @@ import * as BABYLON from 'babylonjs';
 export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager) => {
 	const bullets = [];
 	
+	// --- Target Selection State ---
+	let currentTarget = null;
+	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
+	const targetColor = new BABYLON.Color3(0, 1, 1); // Cyan highlight
+	
+	const setTarget = (mesh) => {
+		if (currentTarget) highlightLayer.removeMesh(currentTarget);
+		
+		// Toggle off if clicking the same target
+		if (currentTarget === mesh) {
+			currentTarget = null;
+			return;
+		}
+		
+		currentTarget = mesh;
+		if (currentTarget) highlightLayer.addMesh(currentTarget, targetColor);
+	};
+	
 	// --- Explosion Logic ---
 	const createExplosion = (position, color = null) => {
 		const fragmentCount = 8;
@@ -46,14 +64,22 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const spawnPos = playerVisual.absolutePosition.clone();
 		spawnPos.y += 1.5;
 		
-		// Determine aim direction based on player rotation
-		const rotationMatrix = BABYLON.Matrix.RotationY(playerVisual.rotation.y);
-		const aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+		let aimDir;
+		
+		// Check if target exists and is valid
+		if (currentTarget && !currentTarget.isDisposed()) {
+			// Aim at target
+			aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
+		} else {
+			// Default: Aim forward based on player rotation
+			const rotationMatrix = BABYLON.Matrix.RotationY(playerVisual.rotation.y);
+			aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
+		}
 		
 		bullet.position = spawnPos.add(aimDir.scale(1.5));
 		shadowGenerator.addShadowCaster(bullet);
 		
-		const power = 50; // Fixed power for real-time
+		const power = 20; // Reduced speed (was 50)
 		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
 		bulletAgg.body.setGravityFactor(0);
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
@@ -72,6 +98,11 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				createExplosion(bullet.absolutePosition);
 				if (name.includes('sphere')) {
 					createExplosion(hitBody.transformNode.absolutePosition, hitBody.transformNode.material?.diffuseColor);
+					
+					// If we destroyed our current target, clear selection
+					if (currentTarget === hitBody.transformNode) {
+						setTarget(null);
+					}
 					// hitBody.transformNode.dispose(); // Optional: Destroy target
 				}
 				bulletData.isDead = true;
@@ -80,17 +111,20 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		});
 	};
 	
-	// --- Input Listener for Firing ---
+	// --- Input Listener ---
 	scene.onPointerObservable.add((pointerInfo) => {
-		// Left click (0) is Pan in FollowCam, Right (2) is Rotate.
-		// Let's use Middle Click (1) or a Keyboard Key (F) for shooting to avoid conflict,
-		// OR just check if we are in First Person mode where Left Click makes sense.
-		// For simplicity: Press 'F' or Left Click if in First Person.
-		
-		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
+		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
+			const pickInfo = pointerInfo.pickInfo;
+			
+			// 1. Check if we clicked a targetable sphere
+			if (pickInfo && pickInfo.hit && pickInfo.pickedMesh && pickInfo.pickedMesh.name.startsWith('sphere')) {
+				setTarget(pickInfo.pickedMesh);
+				return; // Stop here, don't fire if we just selected
+			}
+			
+			// 2. If we didn't click a target, check if we should fire (FPS mode)
 			const camera = cameraManager.getActiveCamera();
-			// If FPS, Left Click shoots
-			if (camera.name === 'firstPersonCam' && pointerInfo.event.button === 0) {
+			if (camera.name === 'firstPersonCam') {
 				spawnBullet();
 			}
 		}
@@ -108,14 +142,20 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onBeforeRenderObservable.add(() => {
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		
+		// Cleanup bullets
 		for (let i = bullets.length - 1; i >= 0; i--) {
 			const b = bullets[i];
 			b.age += dt;
-			if (b.isDead || b.age > 3.0) {
+			if (b.isDead || b.age > 5.0) { // Increased lifetime slightly since speed is lower
 				b.agg.dispose();
 				b.mesh.dispose();
 				bullets.splice(i, 1);
 			}
+		}
+		
+		// Cleanup Target Highlight if target disposed externally
+		if (currentTarget && currentTarget.isDisposed()) {
+			setTarget(null);
 		}
 	});
 	
