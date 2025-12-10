@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import * as BABYLON from '@babylonjs/core';
 
 export const initGameCamera = (scene, canvas, playerRoot) => {
 	// Prevent context menu on right click for the canvas
@@ -42,6 +42,9 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	// Default active
 	scene.activeCamera = followCam;
 	followCam.attachControl(canvas, true);
+	
+	// Track current mode string for UI
+	let currentMode = 'follow';
 	
 	// --- Camera Logic Loop ---
 	scene.onBeforeRenderObservable.add(() => {
@@ -136,34 +139,28 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 		}
 	});
 	
-	// --- UI Logic ---
-	const btnFollow = document.getElementById('btn-follow');
-	const btnFirst = document.getElementById('btn-first');
-	const btnFree = document.getElementById('btn-free');
-	
-	const setActiveBtn = (btn) => {
-		[btnFollow, btnFirst, btnFree].forEach(b => b.classList.remove('active'));
-		btn.classList.add('active');
-	};
-	
-	const switchCamera = (newCam, btn) => {
-		if (scene.activeCamera !== newCam) {
+	// --- Switching Logic ---
+	const setCameraMode = (mode) => {
+		let newCam = null;
+		if (mode === 'follow') newCam = followCam;
+		else if (mode === 'first') newCam = firstPersonCam;
+		else if (mode === 'free') newCam = freeCam;
+		
+		if (newCam && scene.activeCamera !== newCam) {
 			scene.activeCamera.detachControl();
 			scene.activeCamera = newCam;
 			scene.activeCamera.attachControl(canvas, true);
-			setActiveBtn(btn);
+			currentMode = mode;
 			
 			// Focus canvas so keyboard events (WASD) work immediately
 			canvas.focus();
 		}
 	};
 	
-	btnFollow.addEventListener('click', () => switchCamera(followCam, btnFollow));
-	btnFirst.addEventListener('click', () => switchCamera(firstPersonCam, btnFirst));
-	btnFree.addEventListener('click', () => switchCamera(freeCam, btnFree));
-	
 	// Return manager object to allow other modules to get active camera
 	return {
-		getActiveCamera: () => scene.activeCamera
+		getActiveCamera: () => scene.activeCamera,
+		setCameraMode,
+		getCameraMode: () => currentMode
 	};
 };

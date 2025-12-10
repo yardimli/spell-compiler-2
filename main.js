@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import * as BABYLON from '@babylonjs/core';
 import * as Earcut from 'earcut';
 import HavokPhysics from '@babylonjs/havok';
 
@@ -8,6 +8,7 @@ import { initGameSceneAlt } from './game-scene-alt';
 import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
+import { initGameUI } from './game-ui';
 
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
@@ -29,25 +30,27 @@ const createScene = async function () {
 	}
 	
 	// 1. Scene (Load Map)
-	// initGameScene is now async and returns map data
 	const { shadowGenerator, playerStartPosition, ballSpawns } = await initGameScene(scene);
 	
 	// 2. Scene Alt (Balls)
-	// Pass the ball spawns from the map
 	await initGameSceneAlt(scene, shadowGenerator, ballSpawns);
 	
 	// 3. Player & Camera
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
 	
-	// Pass playerStartPosition from map
 	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition);
 	const { playerRoot, playerVisual } = playerManager;
 	
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
+	cameraManagerRef.setCameraMode = realCameraManager.setCameraMode;
+	cameraManagerRef.getCameraMode = realCameraManager.getCameraMode;
 	
 	// 4. Fire System (Real-time)
 	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
+	
+	// 5. UI System
+	initGameUI(scene, realCameraManager);
 	
 	// Focus canvas so keyboard events (WASD) work immediately
 	canvas.focus();

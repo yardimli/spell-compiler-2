@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import * as BABYLON from '@babylonjs/core';
 
 export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager) => {
 	const bullets = [];
@@ -173,10 +173,19 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		if (currentTarget && !currentTarget.isDisposed()) {
 			const dir = currentTarget.absolutePosition.subtract(playerVisual.absolutePosition);
 			// Calculate angle to target (Y rotation)
-			const angle = Math.atan2(dir.x, dir.z);
+			const desiredAngle = Math.atan2(dir.x, dir.z);
 			
-			// Setup smooth turn instead of instant snap
-			targetRotation = angle;
+			// --- CHANGED: Shortest Path Calculation ---
+			const currentAngle = playerVisual.rotation.y;
+			let diff = desiredAngle - currentAngle;
+			
+			// Normalize difference to -PI to +PI
+			while (diff <= -Math.PI) diff += Math.PI * 2;
+			while (diff > Math.PI) diff -= Math.PI * 2;
+			
+			// Set target relative to current rotation to ensure shortest turn
+			targetRotation = currentAngle + diff;
+			
 			isTurning = true;
 			pendingShot = true; // Queue the shot to fire after turning
 		} else {
@@ -262,15 +271,13 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		// Smooth Turn Logic
 		if (isTurning) {
 			// Smoothly interpolate current rotation towards target
-			// Factor 3.0 * dt gives a slower, smoother turn.
-			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 3.0 * dt);
+			// Using standard Lerp because targetRotation is now normalized relative to current
+			playerVisual.rotation.y = BABYLON.Scalar.Lerp(playerVisual.rotation.y, targetRotation, 5.0 * dt);
 			
-			// Check difference (handling wrapping)
-			let diff = targetRotation - playerVisual.rotation.y;
-			while (diff > Math.PI) diff -= 2 * Math.PI;
-			while (diff < -Math.PI) diff += 2 * Math.PI;
+			// Check difference
+			const diff = Math.abs(targetRotation - playerVisual.rotation.y);
 			
-			if (Math.abs(diff) < 0.05) {
+			if (diff < 0.01) {
 				playerVisual.rotation.y = targetRotation;
 				isTurning = false;
 				

@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import * as BABYLON from '@babylonjs/core';
 
 export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition) => {
 	const playerHeight = 4;

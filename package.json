@@ -7,9 +7,10 @@
     "build": "webpack --mode production"
   },
   "dependencies": {
-    "babylonjs": "^7.0.0",
-    "earcut": "^3.0.0",
-    "@babylonjs/havok": "^1.3.0"
+    "@babylonjs/core": "^8.40.1",
+    "@babylonjs/gui": "^8.40.1",
+    "@babylonjs/havok": "^1.3.0",
+    "earcut": "^3.0.0"
   },
   "devDependencies": {
     "webpack": "^5.90.0",
