@@ -79,7 +79,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		bullet.position = spawnPos.add(aimDir.scale(1.5));
 		shadowGenerator.addShadowCaster(bullet);
 		
-		const power = 20; // Reduced speed (was 50)
+		const power = 20;
 		const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
 		bulletAgg.body.setGravityFactor(0);
 		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
@@ -111,21 +111,52 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		});
 	};
 	
+	// --- Helper: Face Target ---
+	const faceTarget = () => {
+		if (currentTarget && !currentTarget.isDisposed()) {
+			const dir = currentTarget.absolutePosition.subtract(playerVisual.absolutePosition);
+			// Calculate angle to target (Y rotation)
+			const angle = Math.atan2(dir.x, dir.z);
+			playerVisual.rotation.y = angle;
+		}
+	};
+	
 	// --- Input Listener ---
 	scene.onPointerObservable.add((pointerInfo) => {
 		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
-			const pickInfo = pointerInfo.pickInfo;
 			
-			// 1. Check if we clicked a targetable sphere
-			if (pickInfo && pickInfo.hit && pickInfo.pickedMesh && pickInfo.pickedMesh.name.startsWith('sphere')) {
-				setTarget(pickInfo.pickedMesh);
-				return; // Stop here, don't fire if we just selected
+			const camera = cameraManager.getActiveCamera();
+			let pickedMesh = null;
+			
+			if (camera.name === 'firstPersonCam') {
+				// In First Person, cast a ray from the camera center
+				const ray = camera.getForwardRay(1000);
+				
+				// --- CHANGED: Filter out player meshes so we don't pick ourselves ---
+				const hit = scene.pickWithRay(ray, (mesh) => {
+					// Ignore the player visual and any children (like the cap)
+					if (mesh === playerVisual || mesh.isDescendantOf(playerVisual)) return false;
+					// Ignore the player root (parent of visual)
+					if (mesh === playerVisual.parent) return false;
+					// Ignore bullets
+					if (mesh.name === 'bullet') return false;
+					
+					return true;
+				});
+				
+				if (hit && hit.hit) {
+					pickedMesh = hit.pickedMesh;
+				}
+			} else {
+				// In Third Person / Free Cam, use the mouse cursor position
+				if (pointerInfo.pickInfo && pointerInfo.pickInfo.hit) {
+					pickedMesh = pointerInfo.pickInfo.pickedMesh;
+				}
 			}
 			
-			// 2. If we didn't click a target, check if we should fire (FPS mode)
-			const camera = cameraManager.getActiveCamera();
-			if (camera.name === 'firstPersonCam') {
-				spawnBullet();
+			// Apply selection if we hit a sphere
+			if (pickedMesh && pickedMesh.name.startsWith('sphere')) {
+				setTarget(pickedMesh);
 			}
 		}
 	});
@@ -133,6 +164,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	scene.onKeyboardObservable.add((kbInfo) => {
 		if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
 			if (kbInfo.event.key.toLowerCase() === 'f') {
+				// If we have a target, turn to face it first
+				if (currentTarget) {
+					faceTarget();
+				}
 				spawnBullet();
 			}
 		}
@@ -146,7 +181,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		for (let i = bullets.length - 1; i >= 0; i--) {
 			const b = bullets[i];
 			b.age += dt;
-			if (b.isDead || b.age > 5.0) { // Increased lifetime slightly since speed is lower
+			if (b.isDead || b.age > 5.0) {
 				b.agg.dispose();
 				b.mesh.dispose();
 				bullets.splice(i, 1);
