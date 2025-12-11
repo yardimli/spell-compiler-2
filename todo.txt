@@ -1,4 +1,99 @@
 #TODO
+this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilation
+
+#SLOW MOTION GAMEPLAY TODO
+
+- instead of jumping balls add enemies called ghosts that move from forward, reverse, left and right.
+- when ghosts collide with each other, the player or a wall they should turn 180 degrees.
+- the ghosts should have simple 3d model with different colors with eyes and a skirt so the direction they are facing is clear.
+- use babylonjs physics engine to do collision detection between ghosts and walls and player, if a ghost isnt moving it probably means it's crashed.
+
+#SLOW MOTION GAMEPLAY DONE
+- when the user auto turns towards the target choose the shortest turn radius direction. currently it will always turn in the same direction and sometimes make a full circle almost.
+- move the help(instructions) and the camera buttons into the babylonjs ui in a new file called game-ui.js instead of having them displayed with html, css
+
+- when clicking with mouse if there is no object clicked on untarget the pickedMesh so if something was targeted it gets unselected
+- in first person player when nothing is targeted show a crosshair in the middle of the screen, fire in the direction of the crosshair, so if the user looks up or down fire with angle
+
+- in first person mode clicking on the balls dont select them as targets.
+- in first person make the turn to face the target smoother and slower before firing.
+
+- change the area to a rectangle that is 3 times longer keep the width the same.
+- remove the player recording and playback code, this game will be realtime.
+- change the arena so it's created from a mazeArray where 1's are walls and 0's are open areas. the array should be at least 20x60 in size.
+
+- add the original select target code with mouse clicking on a ball if no target is selected it should fire as it is, also slow down the bullet speed and make the map.txt 15x40 with fewer walls
+
+- in 1st person mode fire should still be F only and click should select target
+- when player fires if they are not facing the target first turn the player to face the target before firing
+
+
+----------------------------------------------------------------------------
+
+#PACMAN TODO
+- allow the user to fire on ghosts to stun them for 5 seconds, during this time they should turn blue and move slower, user should only have 5 shots at the start of the game, and gain 1 shot every 3 turns. show shots left on the UI.
+
+- change the game ui for score, lives left, shots left, turn timer, power shot and end turn button to be made in a pacman style theme and part of the babylon ui instead of html, only the timeline for waypoints should remain in html. create a new file for the pacman style ui elements and their events.
+
+#PACMAN DONE
+- the user should have 3 lives and each time a ghost catches the player the player should spawn back in the start position.
+
+- make it so game finishes when user gets inside the pen or when the ghosts catch the player.
+- add golden gems that spawn in the empty areas of the maze (0's except in the pen the ghosts start in), add A,B,C,D to indicate where the ghosts start in the pen, and P for where player will start.
+- when the player collects the golden gems increase their score and remove the gem.
+- show score and lives left on the top left of the UI.
+
+
+- dont auto rotate the player, update the keys so left and right will rotate the player, record the rotation in the waypoints as well with how long the rotation took to complete and play it back during playback. keep the auto rotate when user targets and fires at a target only.
+
+- when the game first starts update the mazeMap to have a pen with a single opening in the middle of the game map. all enemises should start inside the pen and the player outside. the enemies will bounce around inside the pen and each time they crash turn a random 90 degree direction. till they manage to get out. also the enemies should scan if their left or right side is open and prefer to go that way besides rotating every time they hit a wall.
+
+- add a pacman like maze of walls to the game area. replace the falling balls with different pacman enemies (create simple 3d graphics for 4 types of enemies) that move around the maze, they follow the maze paths randomly, if they collide with each other or the player they turn around and go the other way.
+
+- add kick action similar to fire action but instead of firing a ball the player kicks a ball that is near them.
+
+
+
+#DONE
+- refactor game-player and game-player-fire and game-scene-alt so the code used for recording the turn is in 3 separate files and the playback code is in another set of 3 separate files.
+
+- allow user to store multiple way points.
+- each waypoint should have start angle the user is facing and end angle to face when reaching the waypoint.
+- if user fires a bullet first rotate them to face the target (if selected).
+- if user fires a bullet add that as a waypoint data that ends with a fire action after reaching the waypoint and facing the end angle.
+- save power level of the shot as well.
+- during playback move the user through all the waypoints in order, moving, rotating and firing.
+- in the turn phase show a timeline of the stored waypoints and shoting actions with ability to delete individual shots or waypoints by clicking on them.
+- during playback show the timeline progress with a moving indicator and also the power level of each shot.
+
+
+- there is a bug where when after ending the second turn phase none of the balls continue their falling or moving around action
+- there is another bug when during playback after the player goes to their init position the opacity of the player doesnt change back to normal.
+
+- when selecting target with "c" rotate the player to face the target.
+- when firing a bullet, rotate the player to face the target before firing in playback.
+- allow user to click on a ball to select it besides using "c" to cycle, rotate the player to face the selected target when selected by click as well.
+
+- change the game to turn based, each turn should be limited to 30 seconds, add a spinner countdown timer on the UI with a end turn button, at zero the turn ends automatically
+- in the turn the user can move a fixed radius away from their current position
+- in the turn phase all bouncing balls are locked and not moving
+- while user is in the turn phase, allow them to highlight targets, and click fire but the bullet should not explode the target or explode itself.
+- there should be a checkbox on the UI to toggle if the user wants to fire a bullet during their turn or not to the selected target, this should show only during the turn phase.
+- when the turn times out, or the user ends their turn reset the user to their original position and move them to the target position over 5 seconds, then start the next turn, during this time disable user input.
+- when the turn starts all balls should start moving again, and the user should fire the bullet before starting to move.
+
+- in game-player-fire change the naming for throwballs  to bullets
+- when a bullet hits a ball both should explode with particle effects and the ball should be destroyed
+- remove gravity from the bullets angle them to fly straight at the target
+
+- when the user fires a ball, they should be able to select a target ball to aim at, use the X key to cycle through targetable balls in view. when fired the ball should home in on the target ball. add a glow effect to the target ball. if the target ball is no longer in view release the glow effect and remove the target. if no target is selected the ball should fire straight.
+
+- if the players balls it fires hit another ball, or wall they should explode on impact and send fragments flying and push the other objects away
+
+- in first person mode, left, and right should rotate the player, not strafe
+- add keys to allow user to strafe left/right without changing direction faced
+- make right click on mouse drag the camera around instead of panning,
+  left click should pan the camera in all modes except free camera
 
 - free camera mouse wheel not working to zoom in/out
 - free camera should pan with right mouse button drag
@@ -7,12 +102,6 @@
 - when clicking on the camera mode buttons, set focus back to the canvas so that keyboard input works
 - balls are firing always away from the camera, they should fire in the direction the player is facing
 - the cap is blocking the 1st persons view, in 1st person view dont render the cap
-
-- add keys to allow user to strafe left/right without changing direction faced
-- make right click on mouse drag the camera around instead of panning,
-  left click should pan the camera in all modes except free camera
-
-#DONE
 
 - add player character
 - player should interact with balls and floor and walls
