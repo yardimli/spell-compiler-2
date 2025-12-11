@@ -152,16 +152,29 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			if (!hitBody || !hitBody.transformNode) return;
 			
 			const name = hitBody.transformNode.name;
-			if (name.includes('wall') || name.includes('sphere') || name.includes('bullet')) {
+			// Check for walls, bullets, or ghosts
+			if (name.includes('wall') || name.includes('ghost') || name.includes('bullet')) {
 				createExplosion(bullet.absolutePosition);
-				if (name.includes('sphere')) {
-					createExplosion(hitBody.transformNode.absolutePosition, hitBody.transformNode.material?.diffuseColor);
+				
+				if (name.includes('ghost')) {
+					// Try to get color from the visual child (head or skirt)
+					const visualChildren = hitBody.transformNode.getChildren();
+					let explosionColor = null;
+					if (visualChildren.length > 0 && visualChildren[0].material) {
+						explosionColor = visualChildren[0].material.diffuseColor;
+					}
+					
+					createExplosion(hitBody.transformNode.absolutePosition, explosionColor);
 					
 					// If we destroyed our current target, clear selection
 					if (currentTarget === hitBody.transformNode) {
 						setTarget(null);
 					}
+					
+					// Dispose the ghost (collider and children)
+					hitBody.transformNode.dispose();
 				}
+				
 				bulletData.isDead = true;
 				bulletAgg.body.getCollisionObservable().remove(collisionObserver);
 			}
@@ -175,7 +188,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			// Calculate angle to target (Y rotation)
 			const desiredAngle = Math.atan2(dir.x, dir.z);
 			
-			// --- CHANGED: Shortest Path Calculation ---
+			// Shortest Path Calculation
 			const currentAngle = playerVisual.rotation.y;
 			let diff = desiredAngle - currentAngle;
 			
@@ -228,8 +241,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				pickedMesh = hit.pickedMesh;
 			}
 			
-			// Untarget if clicking nothing or non-target
-			if (pickedMesh && pickedMesh.name.startsWith('sphere')) {
+			// Target if clicking a ghost (or its collider)
+			if (pickedMesh && (pickedMesh.name.includes('ghost') || pickedMesh.parent?.name?.includes('ghost'))) {
+				// If we hit a child (like head/skirt), target the parent collider if possible, or the mesh itself
+				// Our logic uses the collider for physics, but highlighting works on meshes.
 				setTarget(pickedMesh);
 			} else {
 				// If we clicked a wall, ground, or sky, clear the target
@@ -271,7 +286,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		// Smooth Turn Logic
 		if (isTurning) {
 			// Smoothly interpolate current rotation towards target
-			// Using standard Lerp because targetRotation is now normalized relative to current
 			playerVisual.rotation.y = BABYLON.Scalar.Lerp(playerVisual.rotation.y, targetRotation, 5.0 * dt);
 			
 			// Check difference
