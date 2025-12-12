@@ -1,6 +1,9 @@
 import * as BABYLON from '@babylonjs/core';
 
 export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoot, playerMethods, timeManager, uiManager) => {
+	// Extract playerVisual from the playerMethods object (playerManager)
+	const playerVisual = playerMethods.playerVisual;
+	
 	// --- 3D Text (Kept from original) ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	try {
@@ -120,8 +123,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 			if (bullet.metadata && typeof bullet.metadata.age === 'number') {
 				bullet.metadata.age += dt;
 				
-				// Cleanup after 5 seconds game time
-				if (bullet.metadata.age >= 5.0) {
+				// Cleanup after max lifetime (variable based on power)
+				const maxLife = bullet.metadata.maxLife || 5.0;
+				if (bullet.metadata.age >= maxLife) {
 					if (bullet.metadata.aggregate) {
 						bullet.metadata.aggregate.dispose();
 					}
@@ -228,6 +232,21 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 				inertia: new BABYLON.Vector3(0, 0, 0)
 			});
 			
+			// --- Ghost State & Metadata ---
+			// Initialize Energy and Next Bullet Type
+			let ghostEnergy = 100;
+			let nextBulletType = Math.random() > 0.5 ? 'fire' : 'frost';
+			// We calculate intended power dynamically based on distance, but store a placeholder for UI
+			let nextBulletPower = 1.0;
+			
+			// Attach metadata to collider (logic root) so picking can find it
+			collider.metadata = {
+				type: 'ghost',
+				energy: ghostEnergy,
+				nextType: nextBulletType,
+				nextPower: nextBulletPower
+			};
+			
 			// --- Movement Logic ---
 			const speed = 6.0;
 			const directions = [
@@ -301,6 +320,18 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 				const ts = timeManager ? timeManager.getTimeScale() : 1.0;
 				const dt = (scene.getEngine().getDeltaTime() / 1000) * ts;
 				
+				// Update Metadata for UI (Distance check for power prediction)
+				const distToPlayer = BABYLON.Vector3.Distance(collider.position, playerRoot.position);
+				// Simple linear mapping: 0m = 1.0, 30m = 0.1
+				let predictedPower = Math.max(0.1, Math.min(1.0, 1.0 - (distToPlayer / 30.0)));
+				// Cap predicted power by available energy
+				if (ghostEnergy < predictedPower * 10) {
+					predictedPower = ghostEnergy / 10;
+				}
+				collider.metadata.energy = ghostEnergy;
+				collider.metadata.nextType = nextBulletType;
+				collider.metadata.nextPower = predictedPower;
+				
 				// Decrement fire timer with game time
 				if (!isAttacking && !isRotating) {
 					fireTimer -= dt;
@@ -308,152 +339,233 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 				
 				// --- Shooting Logic ---
 				if (!isAttacking && !isRotating && fireTimer <= 0) {
-					// Start Attack Sequence
-					isAttacking = true;
-					
-					// 1. Stop Movement
-					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
-					
-					// 2. Calculate Angle to Player
-					const dirToPlayer = playerRoot.position.subtract(collider.position);
-					const angleToPlayer = Math.atan2(dirToPlayer.x, dirToPlayer.z);
-					
-					// 3. Store original rotation (movement direction)
-					const originalRotY = ghostNode.rotation.y;
-					
-					// 4. Sequence: Turn -> Fire -> Turn Back -> Resume
-					const performAttack = async () => {
-						// A. Turn to Player
-						let startRot = ghostNode.rotation.y;
-						// Normalize angles
-						let diff = angleToPlayer - startRot;
-						while (diff > Math.PI) diff -= Math.PI * 2;
-						while (diff < -Math.PI) diff += Math.PI * 2;
-						const endRot = startRot + diff;
+					// Check if we have enough energy to fire even a weak shot (min 1 energy for 0.1 power)
+					if (ghostEnergy >= 1.0) {
+						// Start Attack Sequence
+						isAttacking = true;
 						
-						// Helper to animate rotation respecting Time Scale
-						const animateTurn = (targetAngle) => {
-							return new Promise(resolve => {
-								const loop = () => {
-									if (collider.isDisposed()) return;
-									// Re-fetch dt inside loop as it changes
-									const currentTs = timeManager ? timeManager.getTimeScale() : 1.0;
-									const currentDt = (scene.getEngine().getDeltaTime() / 1000) * currentTs;
-									
-									const turnSpeed = 5.0;
-									ghostNode.rotation.y = BABYLON.Scalar.Lerp(ghostNode.rotation.y, targetAngle, turnSpeed * currentDt);
-									
-									if (Math.abs(ghostNode.rotation.y - targetAngle) < 0.05) {
-										ghostNode.rotation.y = targetAngle;
-										resolve();
-									} else {
-										requestAnimationFrame(loop);
-									}
-								};
-								loop();
-							});
-						};
+						// 1. Stop Movement
+						ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
 						
-						await animateTurn(endRot);
+						// 2. Calculate Angle to Player
+						const dirToPlayer = playerRoot.position.subtract(collider.position);
+						const angleToPlayer = Math.atan2(dirToPlayer.x, dirToPlayer.z);
 						
-						// B. Fire Bullet
-						const bulletType = Math.random() > 0.5 ? 'fire' : 'frost';
-						const bullet = BABYLON.MeshBuilder.CreateSphere('enemyBullet', { diameter: 0.4 }, scene);
-						const bulletMat = new BABYLON.StandardMaterial('enemyBulletMat', scene);
+						// 3. Store original rotation (movement direction)
+						const originalRotY = ghostNode.rotation.y;
 						
-						// Visuals: Same as player (Yellow)
-						bulletMat.diffuseColor = new BABYLON.Color3(1, 1, 0);
-						bulletMat.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0);
-						bullet.material = bulletMat;
-						
-						// Store type in metadata for interaction
-						// Also store age and aggregate for cleanup
-						bullet.metadata = {
-							type: bulletType,
-							age: 0
-						};
-						
-						// Initial Scaling
-						if (timeManager && timeManager.isSlowMotion()) {
-							bullet.scaling.setAll(3.0);
-						}
-						
-						// Track bullet
-						activeEnemyBullets.push(bullet);
-						
-						// Position at ghost eye level
-						const spawnPos = collider.position.clone();
-						spawnPos.y += 1.0;
-						const forward = new BABYLON.Vector3(Math.sin(endRot), 0, Math.cos(endRot));
-						bullet.position = spawnPos.add(forward.scale(1.5));
-						
-						const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
-						bulletAgg.body.setGravityFactor(0);
-						
-						// Store aggregate for cleanup
-						bullet.metadata.aggregate = bulletAgg;
-						
-						// Speed: Half of player (Player=20, so 10)
-						// Scale impulse by timeScale
-						const currentTs = timeManager ? timeManager.getTimeScale() : 1.0;
-						bulletAgg.body.applyImpulse(forward.scale(10 * currentTs), bullet.absolutePosition);
-						
-						// Bullet Collision Logic
-						bulletAgg.body.setCollisionCallbackEnabled(true);
-						const bObserver = bulletAgg.body.getCollisionObservable().add((bEvent) => {
-							const hit = bEvent.collidedAgainst;
-							if (!hit || !hit.transformNode) return;
-							const hitName = hit.transformNode.name;
+						// 4. Sequence: Turn -> Fire -> Turn Back -> Resume
+						const performAttack = async () => {
+							// A. Turn to Player
+							let startRot = ghostNode.rotation.y;
+							// Normalize angles
+							let diff = angleToPlayer - startRot;
+							while (diff > Math.PI) diff -= Math.PI * 2;
+							while (diff < -Math.PI) diff += Math.PI * 2;
+							const endRot = startRot + diff;
 							
-							if (hitName === 'playerRoot' || hitName === 'playerVisual') {
-								// Hit Player
-								if (bulletType === 'fire') {
-									playerMethods.takeDamage(10);
-									createImpactParticles(bullet.absolutePosition, 'fire');
-								} else {
-									playerMethods.applyFrost();
-									createImpactParticles(bullet.absolutePosition, 'frost');
+							// Helper to animate rotation respecting Time Scale
+							const animateTurn = (targetAngle) => {
+								return new Promise(resolve => {
+									const loop = () => {
+										if (collider.isDisposed()) return;
+										// Re-fetch dt inside loop as it changes
+										const currentTs = timeManager ? timeManager.getTimeScale() : 1.0;
+										const currentDt = (scene.getEngine().getDeltaTime() / 1000) * currentTs;
+										
+										const turnSpeed = 5.0;
+										ghostNode.rotation.y = BABYLON.Scalar.Lerp(ghostNode.rotation.y, targetAngle, turnSpeed * currentDt);
+										
+										if (Math.abs(ghostNode.rotation.y - targetAngle) < 0.05) {
+											ghostNode.rotation.y = targetAngle;
+											resolve();
+										} else {
+											requestAnimationFrame(loop);
+										}
+									};
+									loop();
+								});
+							};
+							
+							// Helper to wait game time
+							const waitGameTime = (seconds) => {
+								return new Promise(resolve => {
+									let elapsed = 0;
+									const timerLoop = () => {
+										const ts = timeManager ? timeManager.getTimeScale() : 1.0;
+										elapsed += (scene.getEngine().getDeltaTime() / 1000) * ts;
+										if (elapsed >= seconds) resolve();
+										else requestAnimationFrame(timerLoop);
+									};
+									timerLoop();
+								});
+							};
+							
+							await animateTurn(endRot);
+							
+							// --- NEW: Line of Sight Check ---
+							let hasLineOfSight = false;
+							
+							const rayOrigin = collider.position.clone();
+							rayOrigin.y += 1.0; // Eye height
+							
+							const rayTarget = playerRoot.position.clone();
+							rayTarget.y += 1.0; // Player center height
+							
+							const direction = rayTarget.subtract(rayOrigin);
+							const dist = direction.length();
+							direction.normalize();
+							
+							const ray = new BABYLON.Ray(rayOrigin, direction, dist);
+							
+							const hit = scene.pickWithRay(ray, (mesh) => {
+								// Ignore self (collider and visual children)
+								if (mesh === collider || mesh.isDescendantOf(collider)) return false;
+								// Ignore bullets
+								if (mesh.name.toLowerCase().includes('bullet')) return false;
+								// Ignore UI lines
+								if (mesh.name === 'hLine' || mesh.name === 'vLine') return false;
+								// Ignore skybox/text
+								if (mesh.name === 'text' || mesh.name.includes('skyBox')) return false;
+								
+								return true;
+							});
+							
+							if (hit && hit.hit && hit.pickedMesh) {
+								const m = hit.pickedMesh;
+								// Check if player (Root or Visual)
+								if (m === playerRoot || m === playerVisual || m.isDescendantOf(playerRoot)) {
+									hasLineOfSight = true;
 								}
-							} else {
-								// Hit Wall or Ghost -> Disappear with small particle
-								createImpactParticles(bullet.absolutePosition, 'neutral');
 							}
 							
-							// Destroy Bullet
-							const idx = activeEnemyBullets.indexOf(bullet);
-							if (idx > -1) activeEnemyBullets.splice(idx, 1);
-							
-							bulletAgg.dispose();
-							bullet.dispose();
-						});
-						
-						// C. Wait a moment (scaled by time)
-						// We use a loop to wait "game time"
-						const waitGameTime = (seconds) => {
-							return new Promise(resolve => {
-								let elapsed = 0;
-								const timerLoop = () => {
-									const ts = timeManager ? timeManager.getTimeScale() : 1.0;
-									elapsed += (scene.getEngine().getDeltaTime() / 1000) * ts;
-									if (elapsed >= seconds) resolve();
-									else requestAnimationFrame(timerLoop);
+							if (hasLineOfSight) {
+								// B. Calculate Power & Fire Bullet
+								// Recalculate distance at moment of firing
+								const currentDist = BABYLON.Vector3.Distance(collider.position, playerRoot.position);
+								
+								// Power Logic: Close = High, Far = Low
+								// Map 0m -> 1.0, 30m -> 0.1
+								let power = Math.max(0.1, Math.min(1.0, 1.0 - (currentDist / 30.0)));
+								
+								// Conservation Logic:
+								// If we are close (High Power) but energy is getting low (< 50),
+								// or just randomly to save energy, reduce power.
+								// 30% chance to halve power if power > 0.5
+								if (power > 0.5 && Math.random() < 0.3) {
+									power *= 0.5;
+								}
+								
+								// Cost Logic: Full power (1.0) = 10 Energy
+								let cost = power * 10;
+								
+								// If not enough energy, scale power down to what we can afford
+								if (ghostEnergy < cost) {
+									power = ghostEnergy / 10;
+									cost = ghostEnergy;
+								}
+								
+								// Deduct Energy
+								ghostEnergy -= cost;
+								
+								const bulletType = nextBulletType;
+								const bullet = BABYLON.MeshBuilder.CreateSphere('enemyBullet', { diameter: 0.4 }, scene);
+								const bulletMat = new BABYLON.StandardMaterial('enemyBulletMat', scene);
+								
+								// Visuals: Same as player (Yellow)
+								bulletMat.diffuseColor = new BABYLON.Color3(1, 1, 0);
+								bulletMat.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0);
+								bullet.material = bulletMat;
+								
+								// Store type and power in metadata for interaction
+								// Scale lifetime by power: Base 2s + (Power * 3s) -> Max 5s
+								const lifetime = 2.0 + (power * 3.0);
+								
+								bullet.metadata = {
+									type: bulletType,
+									power: power,
+									age: 0,
+									maxLife: lifetime
 								};
-								timerLoop();
-							});
+								
+								// Initial Scaling
+								if (timeManager && timeManager.isSlowMotion()) {
+									bullet.scaling.setAll(3.0);
+								}
+								
+								// Track bullet
+								activeEnemyBullets.push(bullet);
+								
+								// Position at ghost eye level
+								const spawnPos = collider.position.clone();
+								spawnPos.y += 1.0;
+								const forward = new BABYLON.Vector3(Math.sin(endRot), 0, Math.cos(endRot));
+								bullet.position = spawnPos.add(forward.scale(1.5));
+								
+								const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
+								bulletAgg.body.setGravityFactor(0);
+								
+								// Store aggregate for cleanup
+								bullet.metadata.aggregate = bulletAgg;
+								
+								// Speed: Half of player (Player=20, so 10)
+								// Scale impulse by timeScale
+								const currentTs = timeManager ? timeManager.getTimeScale() : 1.0;
+								bulletAgg.body.applyImpulse(forward.scale(10 * currentTs), bullet.absolutePosition);
+								
+								// Bullet Collision Logic
+								bulletAgg.body.setCollisionCallbackEnabled(true);
+								const bObserver = bulletAgg.body.getCollisionObservable().add((bEvent) => {
+									const hit = bEvent.collidedAgainst;
+									if (!hit || !hit.transformNode) return;
+									const hitName = hit.transformNode.name;
+									
+									if (hitName === 'playerRoot' || hitName === 'playerVisual') {
+										// Hit Player
+										// Calculate effects based on power
+										if (bulletType === 'fire') {
+											// Full power = 10 damage
+											const damage = Math.ceil(10 * power);
+											playerMethods.takeDamage(damage);
+											createImpactParticles(bullet.absolutePosition, 'fire');
+										} else {
+											// Full power = 5 seconds slow
+											const slowDuration = 5.0 * power;
+											playerMethods.applyFrost(slowDuration);
+											createImpactParticles(bullet.absolutePosition, 'frost');
+										}
+									} else {
+										// Hit Wall or Ghost -> Disappear with small particle
+										createImpactParticles(bullet.absolutePosition, 'neutral');
+									}
+									
+									// Destroy Bullet
+									const idx = activeEnemyBullets.indexOf(bullet);
+									if (idx > -1) activeEnemyBullets.splice(idx, 1);
+									
+									bulletAgg.dispose();
+									bullet.dispose();
+								});
+								
+								// C. Wait a moment (scaled by time)
+								await waitGameTime(0.5);
+							}
+							
+							// D. Turn Back to Movement Direction
+							await animateTurn(originalRotY);
+							
+							// E. Resume & Pick Next Bullet Type
+							isAttacking = false;
+							nextBulletType = Math.random() > 0.5 ? 'fire' : 'frost';
+							// Set next fire time (8-10 seconds game time)
+							fireTimer = (Math.random() * 2.0) + 8.0;
 						};
 						
-						await waitGameTime(0.5);
-						
-						// D. Turn Back to Movement Direction
-						await animateTurn(originalRotY);
-						
-						// E. Resume
-						isAttacking = false;
-						// Set next fire time (8-10 seconds game time)
-						fireTimer = (Math.random() * 2.0) + 8.0;
-					};
-					
-					performAttack();
+						performAttack();
+					} else {
+						// Not enough energy to fire, just reset timer to check again later
+						fireTimer = 2.0;
+					}
 				}
 				
 				if (isAttacking) {
@@ -477,7 +589,6 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 					const vel = new BABYLON.Vector3();
 					ghostAgg.body.getLinearVelocityToRef(vel);
 					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, vel.y, 0));
-					
 				} else {
 					// --- Moving State ---
 					// Scale velocity by timeScale

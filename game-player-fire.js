@@ -250,7 +250,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	// --- Input Listener ---
 	scene.onPointerObservable.add((pointerInfo) => {
 		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
-			
 			const camera = cameraManager.getActiveCamera();
 			const isFPS = (camera.name === 'firstPersonCam');
 			const isSlowMo = timeManager && timeManager.isSlowMotion();
@@ -289,16 +288,42 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					// Check if it's a bullet (Player or Enemy)
 					if (mesh.name.toLowerCase().includes('bullet')) {
 						const type = (mesh.metadata && mesh.metadata.type) ? mesh.metadata.type : 'standard';
+						const power = (mesh.metadata && mesh.metadata.power) ? mesh.metadata.power : 1.0;
 						if (uiManager && uiManager.createBulletDebugWindow) {
-							uiManager.createBulletDebugWindow(mesh, type);
+							uiManager.createBulletDebugWindow(mesh, type, power);
 						}
 						// If we clicked a bullet, we do NOT fire.
+						return;
+					}
+					
+					// Check if it's a Ghost (Visuals are children of the collider)
+					// We need to traverse up to find the root/collider where metadata is stored
+					let node = mesh;
+					let ghostCollider = null;
+					while (node) {
+						if (node.name.startsWith('ghostCollider_')) {
+							ghostCollider = node;
+							break;
+						}
+						node = node.parent;
+					}
+					
+					if (ghostCollider && ghostCollider.metadata && ghostCollider.metadata.type === 'ghost') {
+						if (uiManager && uiManager.createGhostDebugWindow) {
+							uiManager.createGhostDebugWindow(
+								mesh, // Link UI to the clicked mesh (visual)
+								ghostCollider.metadata.energy,
+								ghostCollider.metadata.nextType,
+								ghostCollider.metadata.nextPower
+							);
+						}
+						// If we clicked a ghost in slow mo, we do NOT fire.
 						return;
 					}
 				}
 			}
 			
-			// --- 2. Firing / Targeting Logic (If not analyzing a bullet) ---
+			// --- 2. Firing / Targeting Logic (If not analyzing a bullet/ghost) ---
 			const canvas = scene.getEngine().getRenderingCanvas();
 			const isLocked = (document.pointerLockElement === canvas);
 			

@@ -183,10 +183,10 @@ export const initGameUI = (scene, cameraManager) => {
 	gameOverRect.addControl(gameOverText);
 	
 	// --- Bullet Debug Window Helper ---
-	const createBulletDebugWindow = (mesh, type) => {
+	const createBulletDebugWindow = (mesh, type, power = 1.0) => {
 		const rect = new GUI.Rectangle();
-		rect.width = '100px';
-		rect.height = '40px';
+		rect.width = '120px';
+		rect.height = '60px';
 		rect.cornerRadius = 5;
 		rect.color = 'white';
 		rect.thickness = 1;
@@ -195,12 +195,67 @@ export const initGameUI = (scene, cameraManager) => {
 		rect.linkWithMesh(mesh);
 		rect.linkOffsetY = -50;
 		
+		const stack = new GUI.StackPanel();
+		rect.addControl(stack);
+		
 		const label = new GUI.TextBlock();
 		label.text = type.toUpperCase();
 		label.color = type === 'fire' ? 'orange' : 'cyan';
 		label.fontSize = 14;
 		label.fontWeight = 'bold';
-		rect.addControl(label);
+		label.height = '30px';
+		stack.addControl(label);
+		
+		const powerLabel = new GUI.TextBlock();
+		powerLabel.text = `PWR: ${(power * 100).toFixed(0)}%`;
+		powerLabel.color = 'white';
+		powerLabel.fontSize = 12;
+		powerLabel.height = '20px';
+		stack.addControl(powerLabel);
+		
+		// Remove after 2 seconds
+		setTimeout(() => {
+			rect.dispose();
+		}, 2000);
+	};
+	
+	// --- Ghost Debug Window Helper ---
+	const createGhostDebugWindow = (mesh, energy, nextType, nextPower) => {
+		const rect = new GUI.Rectangle();
+		rect.width = '160px';
+		rect.height = '80px';
+		rect.cornerRadius = 5;
+		rect.color = 'white';
+		rect.thickness = 1;
+		rect.background = 'rgba(0, 0, 0, 0.8)';
+		advancedTexture.addControl(rect);
+		rect.linkWithMesh(mesh);
+		rect.linkOffsetY = -80;
+		
+		const stack = new GUI.StackPanel();
+		rect.addControl(stack);
+		
+		const energyLabel = new GUI.TextBlock();
+		energyLabel.text = `ENERGY: ${Math.floor(energy)}/100`;
+		energyLabel.color = 'yellow';
+		energyLabel.fontSize = 14;
+		energyLabel.fontWeight = 'bold';
+		energyLabel.height = '30px';
+		stack.addControl(energyLabel);
+		
+		const nextLabel = new GUI.TextBlock();
+		nextLabel.text = `NEXT: ${nextType.toUpperCase()}`;
+		nextLabel.color = nextType === 'fire' ? 'orange' : 'cyan';
+		nextLabel.fontSize = 12;
+		nextLabel.height = '20px';
+		stack.addControl(nextLabel);
+		
+		const powerLabel = new GUI.TextBlock();
+		powerLabel.text = `PWR: ${(nextPower * 100).toFixed(0)}%`;
+		powerLabel.color = 'white';
+		powerLabel.fontSize = 12;
+		powerLabel.height = '20px';
+		stack.addControl(powerLabel);
 		
 		// Remove after 2 seconds
 		setTimeout(() => {
@@ -237,6 +292,7 @@ export const initGameUI = (scene, cameraManager) => {
 			}
 		},
 		createBulletDebugWindow,
+		createGhostDebugWindow,
 		updateHealth: (current, max) => {
 			const percentage = Math.max(0, current / max);
 			healthBar.width = `${percentage * 100}%`;

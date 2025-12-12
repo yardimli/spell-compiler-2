@@ -93,7 +93,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		}
 	};
 	
-	const applyFrost = () => {
+	// Modified: applyFrost now accepts duration in seconds
+	const applyFrost = (durationSeconds = 3.0) => {
 		if (isDead) return;
 		
 		// Slow speed by half
@@ -110,7 +111,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 				speedMultiplier = 1.0;
 				playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0); // Reset color
 			}
-		}, 3000); // 3 seconds
+		}, durationSeconds * 1000); // Convert to ms
 	};
 	
 	const die = () => {
@@ -157,7 +158,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 			if (moveDir.lengthSquared() > 0.001) {
 				playerVisual.rotation.y = camera.rotation.y;
 			}
-			
 		} else {
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
 			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
