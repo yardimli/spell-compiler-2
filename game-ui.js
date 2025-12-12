@@ -2,7 +2,6 @@ import * as GUI from '@babylonjs/gui';
 
 export const initGameUI = (scene, cameraManager) => {
 	// Create the advanced texture (fullscreen UI)
-	// FIXED: Explicitly pass the scene as the 3rd argument
 	const advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI', true, scene);
 	
 	// --- Top Panel (Camera Controls) ---
@@ -32,15 +31,15 @@ export const initGameUI = (scene, cameraManager) => {
 		
 		button.onPointerUpObservable.add(() => {
 			cameraManager.setCameraMode(mode);
-			updateButtonStyles();
+			// Styles update via observer
 		});
 		
 		return button;
 	};
 	
-	const btnFollow = createButton('btnFollow', 'Follow', 'follow');
-	const btnFirst = createButton('btnFirst', '1st Person', 'first');
-	const btnFree = createButton('btnFree', 'Free', 'free');
+	const btnFollow = createButton('btnFollow', 'Follow (1)', 'follow');
+	const btnFirst = createButton('btnFirst', '1st Person (2)', 'first');
+	const btnFree = createButton('btnFree', 'Free (3)', 'free');
 	
 	topPanel.addControl(btnFollow);
 	topPanel.addControl(btnFirst);
@@ -52,13 +51,32 @@ export const initGameUI = (scene, cameraManager) => {
 		const activeColor = '#007bff';
 		const inactiveColor = 'rgba(0, 0, 0, 0.7)';
 		
-		btnFollow.background = (activeMode === 'follow') ? activeColor : inactiveColor;
-		btnFirst.background = (activeMode === 'first') ? activeColor : inactiveColor;
-		btnFree.background = (activeMode === 'free') ? activeColor : inactiveColor;
+		const updateBtn = (btn, mode) => {
+			const isActive = (activeMode === mode);
+			btn.background = isActive ? activeColor : inactiveColor;
+			
+			if (isActive) {
+				// Fade out and disable hit test so it doesn't block mouse input
+				btn.alpha = 0.5;
+				btn.isHitTestVisible = false;
+			} else {
+				// Restore visibility and interactivity
+				btn.alpha = 1.0;
+				btn.isHitTestVisible = true;
+			}
+		};
+		
+		updateBtn(btnFollow, 'follow');
+		updateBtn(btnFirst, 'first');
+		updateBtn(btnFree, 'free');
 	};
 	
-	// Initialize styles
-	updateButtonStyles();
+	// --- Sync UI with Camera State ---
+	// Since camera mode can change via keyboard shortcuts (1, 2, 3),
+	// we need to check the state regularly to update the UI buttons.
+	scene.onBeforeRenderObservable.add(() => {
+		updateButtonStyles();
+	});
 	
 	// --- Bottom Panel (Instructions) ---
 	const rectInfo = new GUI.Rectangle();

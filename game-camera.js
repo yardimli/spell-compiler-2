@@ -2,7 +2,9 @@ import * as BABYLON from '@babylonjs/core';
 
 export const initGameCamera = (scene, canvas, playerRoot) => {
 	// Prevent context menu on right click for the canvas
-	canvas.oncontextmenu = (e) => { e.preventDefault(); };
+	canvas.oncontextmenu = (e) => {
+		e.preventDefault();
+	};
 	
 	// 1. Follow Camera (Third Person)
 	const followCam = new BABYLON.ArcRotateCamera('followCam', -Math.PI / 2, Math.PI / 2.5, 20, new BABYLON.Vector3(0, 0, 0), scene);
@@ -12,13 +14,10 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	followCam.lowerRadiusLimit = 5;
 	followCam.upperRadiusLimit = 50;
 	
-	// --- CHANGED: Swap Mouse Controls for Follow Camera ---
 	// Goal: Left Click (0) = Pan, Right Click (2) = Rotate
 	followCam.panningMouseButton = 0; // Set Pan to Left Click
 	
 	// Reassign button mapping: [Primary(Rotate), Secondary(Pan), Tertiary(Zoom)]
-	// We map Primary to Right(2) and Secondary to Left(0)
-	// Ensure pointers input is attached before modifying
 	if (followCam.inputs.attached.pointers) {
 		followCam.inputs.attached.pointers.buttons = [2, 0];
 	}
@@ -34,9 +33,7 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	freeCam.setTarget(BABYLON.Vector3.Zero());
 	freeCam.speed = 1.0;
 	
-	// --- NEW: Remove default mouse input ---
-	// This prevents the default behavior (Left Click Rotate) from conflicting with our custom controls.
-	// We want Right Click to Rotate and Left Click to Pan, handled manually below.
+	// Remove default mouse input to prevent conflicts
 	freeCam.inputs.removeByType('FreeCameraMouseInput');
 	
 	// Default active
@@ -58,10 +55,6 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			const headPos = playerRoot.position.clone();
 			headPos.y += 1.5; // Eye level
 			firstPersonCam.position = headPos;
-			
-			// --- CHANGED: Removed Sync Camera Rotation with Player Rotation ---
-			// We allow the camera to look around freely.
-			// Player rotation will sync to camera when moving (handled in game-player.js).
 			
 			// Clamp Pitch (Up/Down) to prevent flipping
 			const limit = 1.5; // Approx 85 degrees
@@ -115,9 +108,6 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 				lastPointerX = x;
 				lastPointerY = y;
 				
-				// --- CHANGED: Right Click = Rotate (Look), Left Click = Pan ---
-				// Swapped logic to match the comment and intended behavior.
-				// Previously, Right Click was triggering Pan, which felt like "dragging very little".
 				if (isRightMouseDown) {
 					// Rotate Camera (Look around)
 					const sensitivity = 0.002;
@@ -144,21 +134,49 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 	// Allow clicking canvas to lock pointer in FPS mode
 	canvas.addEventListener('click', () => {
 		if (currentMode === 'first') {
-			canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-			if (canvas.requestPointerLock) {
-				canvas.requestPointerLock();
+			// Check if already locked to avoid unnecessary requests
+			if (document.pointerLockElement === canvas) return;
+			
+			// Ensure canvas has focus for keyboard events
+			canvas.focus();
+			
+			// Request pointer lock safely
+			const requestLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+			if (requestLock) {
+				// Call with canvas context
+				const promise = requestLock.call(canvas);
+				// Modern browsers return a promise; catch errors to prevent "Uncaught runtime error"
+				if (promise instanceof Promise) {
+					promise.catch((err) => {
+						// This catches "The user has exited the lock before this request was completed"
+						// and other lock denial errors.
+						console.debug('Pointer lock request failed:', err);
+					});
+				}
 			}
 		}
 	});
 	
+	// --- Handle Pointer Lock Change (ESC key) ---
+	document.addEventListener('pointerlockchange', () => {
+		// If lock is lost (user pressed ESC) and we are in first person
+		if (document.pointerLockElement === null && currentMode === 'first') {
+			// Reset pitch to look straight ahead (Horizon)
+			firstPersonCam.rotation.x = 0;
+			// We keep rotation.y (Yaw) so the player doesn't snap to a different direction horizontally
+		}
+	}, false);
+	
 	// --- Switching Logic ---
 	const setCameraMode = (mode) => {
+		if (currentMode === mode) return; // No change needed
+		
 		let newCam = null;
 		if (mode === 'follow') newCam = followCam;
 		else if (mode === 'first') newCam = firstPersonCam;
 		else if (mode === 'free') newCam = freeCam;
 		
-		if (newCam && scene.activeCamera !== newCam) {
+		if (newCam) {
 			scene.activeCamera.detachControl();
 			scene.activeCamera = newCam;
 			scene.activeCamera.attachControl(canvas, true);
@@ -167,19 +185,32 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			// Focus canvas so keyboard events (WASD) work immediately
 			canvas.focus();
 			
-			// Handle Pointer Lock
+			// Handle Pointer Lock State
 			if (mode === 'first') {
-				canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-				if (canvas.requestPointerLock) {
-					canvas.requestPointerLock();
-				}
+				// We do NOT auto-lock here to avoid errors.
+				// User must click canvas to lock.
 			} else {
+				// If leaving first person, ensure we unlock
 				if (document.exitPointerLock) {
 					document.exitPointerLock();
 				}
 			}
 		}
 	};
+	
+	// --- Keyboard Shortcuts (1, 2, 3) ---
+	scene.onKeyboardObservable.add((kbInfo) => {
+		if (kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN) {
+			const key = kbInfo.event.key;
+			if (key === '1') {
+				setCameraMode('follow');
+			} else if (key === '2') {
+				setCameraMode('first');
+			} else if (key === '3') {
+				setCameraMode('free');
+			}
+		}
+	});
 	
 	// Return manager object to allow other modules to get active camera
 	return {

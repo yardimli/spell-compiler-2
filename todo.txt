@@ -4,14 +4,35 @@ this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilatio
 
 #SLOW MOTION GAMEPLAY TODO
 
-- also when clicking on 1st person many times the mouse is locked initially, maybe because the mouse cursor is over the button. when clicking esc in 1st person mode the mouse lock should turn off and the player should revert to looking straight ahead
+- in first person mode when mouse is locked clicking on the mouse button should fire the weapon, not just the F key. when no lock is active clicking should select target as normal.
 
-- add camera shortcut with the numbers 1,2,3
+- BUG: in 1st person mode when releasing the target lock the user looks towards the mouse position but it should just continue looking straight ahead.
 
+
+- add a health bar to the ui for the player, when health is zero game over. start health at 100.
+- have enemies fire frost or file bullets at the player every 5 seconds.
+- frost bullets dont do damage but slow the player movement speed by half for 3 seconds.
+- fire bullets do normal damage of 10 health points.
+- the bullets should look the same as the players bullets but have different particle effects on impact to indicate frost or fire.
+
+- add a button for slow motion toggle on/off on the UI, in slow motion mode everything moves at 10% speed including player movement, enemy movement, bullet speed etc.
+- in slow motion mode user can click on enemy bullets and see if they are fire or frost.
+
+- user has two types of shields they can activate with buttons or keys 'V' and 'B', shield 'V' blocks fire bullets, shield 'B' blocks frost bullets, each shield lasts for 10 seconds.
+- using a shield will consume 3 health when cast.
+- add a visual effect around the player when a shield is active to indicate which shield is active, frost or fire.
+
+- add health packs that spawn randomly in the arena every 15 seconds, when the player collects them increase health by 20 up to a max of 100.
 
 
 
 #SLOW MOTION GAMEPLAY DONE
+
+- also when clicking on 1st person many times the mouse is locked initially, maybe because the mouse cursor is over the button. when clicking esc in 1st person mode the mouse lock should turn off and the player should revert to looking straight ahead
+
+- add camera shortcut with the numbers 1,2,3
+
+- when clicking on the button the mouse is still over the button and so the targeting doesnt register when moving the mouse around. update the code to make the current camera button faded out and not capture mouse movement/click while it is active.
 
 - when the player turns in follow and free camera view it should turn the shortest distance, also when the user press ASDW keys finish the turn before moving.
 - clicking on ghosts doesnt work well, the head and the body is targeted as separate objects and only either head or body is highlighted, the whole ghost should be clickable and all of it should highlight.
