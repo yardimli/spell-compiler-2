@@ -56,8 +56,8 @@ const createScene = async function () {
 	cameraManagerRef.setCameraMode = realCameraManager.setCameraMode;
 	cameraManagerRef.getCameraMode = realCameraManager.getCameraMode;
 	
-	// 8. Fire System (Player Shooting) - Pass timeManager
-	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, timeManager);
+	// 8. Fire System (Player Shooting) - Pass timeManager AND uiManager
+	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, timeManager, uiManager);
 	
 	// Connect UI Slow Mo Button to Time Manager
 	uiManager.setSlowMotionCallback(() => timeManager.toggleSlowMotion());

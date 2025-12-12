@@ -1,6 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 
-export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager, timeManager) => {
+export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager, timeManager, uiManager) => {
 	const bullets = [];
 	
 	// --- Target Selection State ---
@@ -12,6 +12,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	let isTurning = false;
 	let targetRotation = 0;
 	let pendingShot = false;
+	
+	// --- Listen for Slow Motion to Scale Bullets ---
+	if (timeManager && timeManager.addStateChangeListener) {
+		timeManager.addStateChangeListener((isSlow) => {
+			const scale = isSlow ? 3.0 : 1.0;
+			bullets.forEach(b => {
+				if (!b.mesh.isDisposed()) {
+					b.mesh.scaling.setAll(scale);
+				}
+			});
+		});
+	}
 	
 	// --- Crosshair Mesh (Babylon Objects) ---
 	const createCrosshair = () => {
@@ -124,6 +136,14 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		bullet.material.diffuseColor = new BABYLON.Color3(1, 1, 0);
 		bullet.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0);
 		
+		// Metadata for analysis
+		bullet.metadata = { type: 'standard' };
+		
+		// Initial Scaling based on Slow Mo state
+		if (timeManager && timeManager.isSlowMotion()) {
+			bullet.scaling.setAll(3.0);
+		}
+		
 		const spawnPos = playerVisual.absolutePosition.clone();
 		spawnPos.y += 1.5;
 		
@@ -233,7 +253,52 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			
 			const camera = cameraManager.getActiveCamera();
 			const isFPS = (camera.name === 'firstPersonCam');
+			const isSlowMo = timeManager && timeManager.isSlowMotion();
 			
+			// --- 1. Analyze Logic (Slow Motion Only) ---
+			if (isSlowMo) {
+				let pickRay;
+				
+				if (isFPS) {
+					// In FPS, we target exactly what is in the center of the screen
+					pickRay = camera.getForwardRay(100);
+				} else {
+					// In other modes, we target what is under the mouse cursor
+					pickRay = scene.createPickingRay(
+						scene.pointerX,
+						scene.pointerY,
+						BABYLON.Matrix.Identity(),
+						camera
+					);
+				}
+				
+				// Pick the first mesh hit by the ray, filtering out the player itself
+				const hit = scene.pickWithRay(pickRay, (mesh) => {
+					// Ignore Player
+					if (mesh === playerVisual || mesh.isDescendantOf(playerVisual)) return false;
+					if (mesh.name === 'playerRoot') return false;
+					// Ignore UI lines
+					if (mesh.name === 'hLine' || mesh.name === 'vLine') return false;
+					// Ignore invisible physics colliders (like ghost capsules) so we can hit the mesh inside
+					if (mesh.visibility === 0) return false;
+					return true;
+				});
+				
+				if (hit && hit.hit && hit.pickedMesh) {
+					const mesh = hit.pickedMesh;
+					// Check if it's a bullet (Player or Enemy)
+					if (mesh.name.toLowerCase().includes('bullet')) {
+						const type = (mesh.metadata && mesh.metadata.type) ? mesh.metadata.type : 'standard';
+						if (uiManager && uiManager.createBulletDebugWindow) {
+							uiManager.createBulletDebugWindow(mesh, type);
+						}
+						// If we clicked a bullet, we do NOT fire.
+						return;
+					}
+				}
+			}
+			
+			// --- 2. Firing / Targeting Logic (If not analyzing a bullet) ---
 			const canvas = scene.getEngine().getRenderingCanvas();
 			const isLocked = (document.pointerLockElement === canvas);
 			
@@ -244,6 +309,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			
 			let pickedMesh = null;
 			
+			// For targeting, we use the standard pointer ray (works for both FPS unlocked and Free/Follow)
 			const ray = scene.createPickingRay(
 				scene.pointerX,
 				scene.pointerY,

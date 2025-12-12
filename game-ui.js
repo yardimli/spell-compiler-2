@@ -17,7 +17,7 @@ export const initGameUI = (scene, cameraManager) => {
 	
 	// --- Top Panel (Camera Controls) ---
 	const topPanel = new GUI.StackPanel();
-	topPanel.width = '550px'; // Increased width for new button
+	topPanel.width = '550px';
 	topPanel.height = '60px';
 	topPanel.isVertical = false;
 	topPanel.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
@@ -51,12 +51,38 @@ export const initGameUI = (scene, cameraManager) => {
 	const btnFirst = createButton('btnFirst', '1st Person (2)', () => cameraManager.setCameraMode('first'));
 	const btnFree = createButton('btnFree', 'Free (3)', () => cameraManager.setCameraMode('free'));
 	
-	// --- Slow Motion Button ---
-	// Callback will be assigned later via setSlowMotionCallback to avoid circular dependency issues
+	// --- Slow Motion Button with Progress Bar ---
 	let onSlowMoToggle = null;
-	const btnSlowMo = createButton('btnSlowMo', 'Slow Mo (G)', () => {
+	// Create a container button instead of a simple button to hold the progress bar
+	const btnSlowMo = GUI.Button.CreateImageOnlyButton('btnSlowMo', ''); // No image, just container
+	btnSlowMo.width = '120px';
+	btnSlowMo.height = '40px';
+	btnSlowMo.thickness = 1;
+	btnSlowMo.color = 'white';
+	btnSlowMo.background = 'rgba(0, 0, 0, 0.7)';
+	btnSlowMo.cornerRadius = 5;
+	btnSlowMo.onPointerUpObservable.add(() => {
 		if (onSlowMoToggle) onSlowMoToggle();
 	});
+	
+	// Progress Bar (Background fill)
+	const slowMoProgress = new GUI.Rectangle();
+	slowMoProgress.width = '0px'; // Starts empty
+	slowMoProgress.height = '100%';
+	slowMoProgress.background = 'rgba(255, 255, 255, 0.3)';
+	slowMoProgress.thickness = 0;
+	slowMoProgress.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+	slowMoProgress.isHitTestVisible = false;
+	btnSlowMo.addControl(slowMoProgress);
+	
+	// Text Label
+	const slowMoText = new GUI.TextBlock();
+	slowMoText.text = 'Slow Mo (G)';
+	slowMoText.color = 'white';
+	slowMoText.fontSize = 14;
+	slowMoText.fontWeight = 'bold';
+	slowMoText.isHitTestVisible = false;
+	btnSlowMo.addControl(slowMoText);
 	
 	topPanel.addControl(btnFollow);
 	topPanel.addControl(btnFirst);
@@ -189,18 +215,25 @@ export const initGameUI = (scene, cameraManager) => {
 		setSlowMotionActive: (isActive) => {
 			slowMoOverlay.isVisible = isActive;
 		},
-		updateSlowMotionButton: (isActive, cooldown) => {
+		updateSlowMotionButton: (isActive, cooldown, maxCooldown) => {
 			if (isActive) {
-				btnSlowMo.children[0].text = 'ACTIVE';
+				slowMoText.text = 'ACTIVE';
 				btnSlowMo.background = '#007bff';
+				slowMoProgress.width = '0px';
 			} else if (cooldown > 0) {
-				btnSlowMo.children[0].text = Math.ceil(cooldown) + 's';
+				slowMoText.text = Math.ceil(cooldown) + 's';
 				btnSlowMo.background = 'rgba(50, 50, 50, 0.7)';
 				btnSlowMo.isHitTestVisible = false;
+				
+				// Update Progress Bar Width (Inverse: fills up as cooldown finishes, or drains?
+				// Let's make it drain: 100% at start of cooldown, 0% at end)
+				const percent = (cooldown / maxCooldown) * 100;
+				slowMoProgress.width = `${percent}%`;
 			} else {
-				btnSlowMo.children[0].text = 'Slow Mo (G)';
+				slowMoText.text = 'Slow Mo (G)';
 				btnSlowMo.background = 'rgba(0, 0, 0, 0.7)';
 				btnSlowMo.isHitTestVisible = true;
+				slowMoProgress.width = '0px';
 			}
 		},
 		createBulletDebugWindow,

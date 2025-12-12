@@ -88,6 +88,21 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 		}
 	};
 	
+	// --- Track Active Enemy Bullets for Scaling ---
+	const activeEnemyBullets = [];
+	
+	// Listen for Slow Motion to Scale Enemy Bullets
+	if (timeManager && timeManager.addStateChangeListener) {
+		timeManager.addStateChangeListener((isSlow) => {
+			const scale = isSlow ? 3.0 : 1.0;
+			activeEnemyBullets.forEach(b => {
+				if (!b.isDisposed()) {
+					b.scaling.setAll(scale);
+				}
+			});
+		});
+	}
+	
 	// --- Ghost Enemy Logic ---
 	if (spawns && spawns.length > 0) {
 		// Define materials for different ghost types
@@ -321,6 +336,14 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 						// Store type in metadata for interaction
 						bullet.metadata = { type: bulletType };
 						
+						// Initial Scaling
+						if (timeManager && timeManager.isSlowMotion()) {
+							bullet.scaling.setAll(3.0);
+						}
+						
+						// Track bullet
+						activeEnemyBullets.push(bullet);
+						
 						// Position at ghost eye level
 						const spawnPos = collider.position.clone();
 						spawnPos.y += 1.0;
@@ -357,24 +380,23 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 							}
 							
 							// Destroy Bullet
+							const idx = activeEnemyBullets.indexOf(bullet);
+							if (idx > -1) activeEnemyBullets.splice(idx, 1);
+							
 							bullet.dispose();
 							bulletAgg.dispose();
 						});
 						
 						// Interaction: Click to see type in Slow Motion
-						scene.onPointerObservable.add((pointerInfo) => {
-							if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
-								if (pointerInfo.pickInfo.pickedMesh === bullet) {
-									if (timeManager && timeManager.isSlowMotion()) {
-										uiManager.createBulletDebugWindow(bullet, bulletType);
-									}
-								}
-							}
-						});
+						// Note: This is now handled by the generic raycast in game-player-fire.js
+						// We keep the metadata on the bullet so the player script can find it.
 						
 						// Cleanup bullet after 5 seconds if no hit
 						setTimeout(() => {
 							if (!bullet.isDisposed()) {
+								const idx = activeEnemyBullets.indexOf(bullet);
+								if (idx > -1) activeEnemyBullets.splice(idx, 1);
+								
 								bullet.dispose();
 								bulletAgg.dispose();
 							}

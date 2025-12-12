@@ -12,6 +12,9 @@ export const initGameTime = (scene, uiManager) => {
 	let cooldownTimer = 0;
 	let timeScale = 1.0;
 	
+	// Listeners for state changes (used for scaling bullets)
+	const stateChangeListeners = [];
+	
 	// Physics Engine Reference
 	const physicsPlugin = scene.getPhysicsEngine();
 	// We don't change timeStep anymore, we scale velocities/gravity
@@ -35,6 +38,11 @@ export const initGameTime = (scene, uiManager) => {
 		});
 	};
 	
+	// --- Helper: Notify Listeners ---
+	const notifyListeners = (active) => {
+		stateChangeListeners.forEach(cb => cb(active));
+	};
+	
 	// --- Public Methods ---
 	
 	const activateSlowMotion = () => {
@@ -46,6 +54,9 @@ export const initGameTime = (scene, uiManager) => {
 		
 		// Apply Physics Scaling
 		scalePhysics(SLOW_MO_FACTOR);
+		
+		// Notify listeners (e.g. for bullet scaling)
+		notifyListeners(true);
 		
 		// Update UI
 		if (uiManager) {
@@ -62,6 +73,9 @@ export const initGameTime = (scene, uiManager) => {
 		
 		// Restore Physics Scaling (Inverse Factor)
 		scalePhysics(1.0 / SLOW_MO_FACTOR);
+		
+		// Notify listeners
+		notifyListeners(false);
 		
 		// Update UI
 		if (uiManager) {
@@ -96,9 +110,10 @@ export const initGameTime = (scene, uiManager) => {
 			if (cooldownTimer < 0) cooldownTimer = 0;
 		}
 		
-		// Update UI Button Text
+		// Update UI Button Text & Progress
 		if (uiManager) {
-			uiManager.updateSlowMotionButton(isSlowMotion, cooldownTimer);
+			// Pass max cooldown (COOLDOWN) for progress bar calculation
+			uiManager.updateSlowMotionButton(isSlowMotion, cooldownTimer, COOLDOWN);
 		}
 	});
 	
@@ -106,6 +121,8 @@ export const initGameTime = (scene, uiManager) => {
 		getTimeScale: () => timeScale,
 		isSlowMotion: () => isSlowMotion,
 		toggleSlowMotion,
-		activateSlowMotion
+		activateSlowMotion,
+		// Allow other modules to react to slow mo changes
+		addStateChangeListener: (callback) => stateChangeListeners.push(callback)
 	};
 };
