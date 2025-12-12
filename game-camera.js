@@ -59,13 +59,14 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			headPos.y += 1.5; // Eye level
 			firstPersonCam.position = headPos;
 			
-			// --- CHANGED: Sync Camera Rotation with Player Rotation in FPS ---
-			// Since A/D now rotates the player mesh, the camera must follow that rotation.
-			// We find the player visual (child of root) to get the rotation.
-			const playerVisual = playerRoot.getChildren().find(m => m.name === 'playerVisual');
-			if (playerVisual) {
-				firstPersonCam.rotation.y = playerVisual.rotation.y;
-			}
+			// --- CHANGED: Removed Sync Camera Rotation with Player Rotation ---
+			// We allow the camera to look around freely.
+			// Player rotation will sync to camera when moving (handled in game-player.js).
+			
+			// Clamp Pitch (Up/Down) to prevent flipping
+			const limit = 1.5; // Approx 85 degrees
+			if (firstPersonCam.rotation.x > limit) firstPersonCam.rotation.x = limit;
+			if (firstPersonCam.rotation.x < -limit) firstPersonCam.rotation.x = -limit;
 		}
 	});
 	
@@ -139,6 +140,17 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 		}
 	});
 	
+	// --- Pointer Lock Event ---
+	// Allow clicking canvas to lock pointer in FPS mode
+	canvas.addEventListener('click', () => {
+		if (currentMode === 'first') {
+			canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+			if (canvas.requestPointerLock) {
+				canvas.requestPointerLock();
+			}
+		}
+	});
+	
 	// --- Switching Logic ---
 	const setCameraMode = (mode) => {
 		let newCam = null;
@@ -154,6 +166,18 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 			
 			// Focus canvas so keyboard events (WASD) work immediately
 			canvas.focus();
+			
+			// Handle Pointer Lock
+			if (mode === 'first') {
+				canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+				if (canvas.requestPointerLock) {
+					canvas.requestPointerLock();
+				}
+			} else {
+				if (document.exitPointerLock) {
+					document.exitPointerLock();
+				}
+			}
 		}
 	};
 	

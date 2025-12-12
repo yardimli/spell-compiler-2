@@ -69,6 +69,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body) return;
 		
+		const dt = scene.getEngine().getDeltaTime() / 1000;
 		const camera = cameraManager.getActiveCamera();
 		const isFirstPerson = (camera.name === 'firstPersonCam');
 		
@@ -79,42 +80,73 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		
 		// Direction Calculation
 		if (isFirstPerson) {
-			// --- CHANGED: Variable Speed Rotation Logic ---
-			const isTurningLeft = inputMap['a'];
-			const isTurningRight = inputMap['d'];
+			// --- CHANGED: FPS Movement (Strafe + Look) ---
+			// Camera controls rotation (Mouse Look).
+			// WASD controls movement relative to Camera.
 			
-			if (isTurningLeft || isTurningRight) {
-				// Accelerate rotation speed if key is held
-				if (currentRotationSpeed < maxRotationSpeed) {
-					currentRotationSpeed += rotationAcceleration;
-				}
-				
-				if (isTurningLeft) playerVisual.rotation.y -= currentRotationSpeed;
-				if (isTurningRight) playerVisual.rotation.y += currentRotationSpeed;
-			} else {
-				// Reset to minimum speed when keys are released
-				currentRotationSpeed = minRotationSpeed;
-			}
+			const camForward = camera.getDirection(BABYLON.Vector3.Forward());
+			camForward.y = 0; camForward.normalize();
 			
-			const forward = playerVisual.getDirection(BABYLON.Vector3.Forward());
-			forward.y = 0; forward.normalize();
-			const right = playerVisual.getDirection(BABYLON.Vector3.Right());
-			right.y = 0; right.normalize();
+			const camRight = camera.getDirection(BABYLON.Vector3.Right());
+			camRight.y = 0; camRight.normalize();
 			
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
-			let x = (inputMap['e']) ? 1 : 0; x -= (inputMap['q']) ? 1 : 0;
-			moveDir = forward.scale(z).add(right.scale(x));
+			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
+			
+			moveDir = camForward.scale(z).add(camRight.scale(x));
+			
+			// If moving, align player body to camera look direction
+			if (moveDir.lengthSquared() > 0.001) {
+				playerVisual.rotation.y = camera.rotation.y;
+			}
+			
 		} else {
 			// TPS / Free Cam Movement relative to camera view
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
 			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
 			
+			// Only calculate direction if keys are pressed
 			if (z !== 0 || x !== 0) {
 				const camForward = camera.getDirection(BABYLON.Vector3.Forward());
 				camForward.y = 0; camForward.normalize();
 				const camRight = camera.getDirection(BABYLON.Vector3.Right());
 				camRight.y = 0; camRight.normalize();
-				moveDir = camForward.scale(z).add(camRight.scale(x));
+				
+				// Calculate desired move direction
+				const desiredDir = camForward.scale(z).add(camRight.scale(x)).normalize();
+				
+				// --- Shortest Path Rotation & Turn-Before-Move Logic ---
+				
+				// 1. Calculate target angle
+				const targetRotation = Math.atan2(desiredDir.x, desiredDir.z);
+				
+				// 2. Calculate difference between current and target
+				let diff = targetRotation - playerVisual.rotation.y;
+				
+				// 3. Normalize difference to -PI to +PI for shortest turn
+				while (diff > Math.PI) diff -= Math.PI * 2;
+				while (diff < -Math.PI) diff += Math.PI * 2;
+				
+				// 4. Rotate towards target
+				const turnSpeed = 10.0; // Radians per second
+				const step = turnSpeed * dt;
+				
+				if (Math.abs(diff) > step) {
+					// Rotate by step in the correct direction
+					playerVisual.rotation.y += Math.sign(diff) * step;
+				} else {
+					// Snap to target if close enough
+					playerVisual.rotation.y = targetRotation;
+				}
+				
+				// 5. Only allow movement if we are roughly facing the target
+				// Threshold of ~11 degrees (0.2 radians)
+				if (Math.abs(diff) < 0.2) {
+					moveDir = desiredDir;
+				} else {
+					// If turning, do not add movement force yet
+					moveDir = new BABYLON.Vector3(0, 0, 0);
+				}
 			}
 		}
 		
@@ -134,12 +166,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		if (isJumping && hit.hit) yVel = jumpForce;
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
-		
-		// Visual Rotation (Third Person)
-		if (!isFirstPerson && moveDir.lengthSquared() > 0.01) {
-			const targetRotation = Math.atan2(moveDir.x, moveDir.z);
-			playerVisual.rotation.y = BABYLON.Scalar.LerpAngle(playerVisual.rotation.y, targetRotation, 0.2);
-		}
 	});
 	
 	return {

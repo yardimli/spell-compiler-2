@@ -1,14 +1,29 @@
 #TODO
 this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilation
 
+
 #SLOW MOTION GAMEPLAY TODO
+
+- also when clicking on 1st person many times the mouse is locked initially, maybe because the mouse cursor is over the button. when clicking esc in 1st person mode the mouse lock should turn off and the player should revert to looking straight ahead
+
+- add camera shortcut with the numbers 1,2,3
+
+
+
+
+#SLOW MOTION GAMEPLAY DONE
+
+- when the player turns in follow and free camera view it should turn the shortest distance, also when the user press ASDW keys finish the turn before moving.
+- clicking on ghosts doesnt work well, the head and the body is targeted as separate objects and only either head or body is highlighted, the whole ghost should be clickable and all of it should highlight.
+
+- in first person mode the user should be able to look up down without having to click the mouse key, just moving the mouse should do it also allow them to look around left/right, when they start moving again change the camera to the direction the player is facing
+
 
 - instead of jumping balls add enemies called ghosts that move from forward, reverse, left and right.
 - when ghosts collide with each other, the player or a wall they should turn 180 degrees.
 - the ghosts should have simple 3d model with different colors with eyes and a skirt so the direction they are facing is clear.
 - use babylonjs physics engine to do collision detection between ghosts and walls and player, if a ghost isnt moving it probably means it's crashed.
 
-#SLOW MOTION GAMEPLAY DONE
 - when the user auto turns towards the target choose the shortest turn radius direction. currently it will always turn in the same direction and sometimes make a full circle almost.
 - move the help(instructions) and the camera buttons into the babylonjs ui in a new file called game-ui.js instead of having them displayed with html, css
 

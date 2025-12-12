@@ -4,7 +4,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const bullets = [];
 	
 	// --- Target Selection State ---
-	let currentTarget = null;
+	let currentTargetRoot = null; // Changed to track the root of the target
 	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
 	const targetColor = new BABYLON.Color3(0, 1, 1); // Cyan highlight
 	
@@ -41,17 +41,38 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	const crosshair = createCrosshair();
 	
-	const setTarget = (mesh) => {
-		if (currentTarget) highlightLayer.removeMesh(currentTarget);
+	// --- NEW: Helper to recursively get all meshes from a root ---
+	const getAllMeshes = (node, list = []) => {
+		if (node instanceof BABYLON.Mesh) {
+			list.push(node);
+		}
+		const children = node.getChildren();
+		for (const child of children) {
+			getAllMeshes(child, list);
+		}
+		return list;
+	};
+	
+	// --- UPDATED: Set Target Logic ---
+	const setTarget = (rootNode) => {
+		// 1. Clear existing highlights
+		if (currentTargetRoot) {
+			const oldMeshes = getAllMeshes(currentTargetRoot);
+			oldMeshes.forEach(m => highlightLayer.removeMesh(m));
+		}
 		
-		// Toggle off if clicking the same target
-		if (currentTarget === mesh) {
-			currentTarget = null;
+		// 2. Toggle off if clicking the same target
+		if (currentTargetRoot === rootNode) {
+			currentTargetRoot = null;
 			return;
 		}
 		
-		currentTarget = mesh;
-		if (currentTarget) highlightLayer.addMesh(currentTarget, targetColor);
+		// 3. Set new target and highlight all its children
+		currentTargetRoot = rootNode;
+		if (currentTargetRoot) {
+			const newMeshes = getAllMeshes(currentTargetRoot);
+			newMeshes.forEach(m => highlightLayer.addMesh(m, targetColor));
+		}
 	};
 	
 	// --- Explosion Logic ---
@@ -110,9 +131,20 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const isFPS = (camera.name === 'firstPersonCam');
 		
 		// Check if target exists and is valid
-		if (currentTarget && !currentTarget.isDisposed()) {
-			// Aim at target
-			aimDir = currentTarget.absolutePosition.subtract(spawnPos).normalize();
+		if (currentTargetRoot && !currentTargetRoot.isDisposed()) {
+			// Aim at target (use absolute position of the root or a child)
+			// Since root might be a TransformNode at 0,0,0 relative to parent, use absolutePosition
+			// Note: TransformNodes have absolutePosition if updated.
+			// Better to aim at the center of the visual mass.
+			let targetPos = currentTargetRoot.absolutePosition.clone();
+			
+			// If the root is the collider (invisible), aim slightly up?
+			// Or if it's the visual root.
+			// Let's try to find the 'head' child for better aiming if possible.
+			const head = currentTargetRoot.getChildren().find(c => c.name === 'head');
+			if (head) targetPos = head.absolutePosition.clone();
+			
+			aimDir = targetPos.subtract(spawnPos).normalize();
 		} else {
 			// FPS Aiming Logic
 			if (isFPS) {
@@ -160,18 +192,27 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					// Try to get color from the visual child (head or skirt)
 					const visualChildren = hitBody.transformNode.getChildren();
 					let explosionColor = null;
-					if (visualChildren.length > 0 && visualChildren[0].material) {
-						explosionColor = visualChildren[0].material.diffuseColor;
-					}
+					// Traverse to find a material
+					const findMat = (node) => {
+						if (node.material) return node.material.diffuseColor;
+						for (const child of node.getChildren()) {
+							const col = findMat(child);
+							if (col) return col;
+						}
+						return null;
+					};
+					explosionColor = findMat(hitBody.transformNode);
 					
 					createExplosion(hitBody.transformNode.absolutePosition, explosionColor);
 					
-					// If we destroyed our current target, clear selection
-					if (currentTarget === hitBody.transformNode) {
+					// If we destroyed our current target (or its parent), clear selection
+					// Check if the hit node is part of the current target hierarchy
+					if (currentTargetRoot && (currentTargetRoot === hitBody.transformNode || hitBody.transformNode.isDescendantOf(currentTargetRoot))) {
 						setTarget(null);
 					}
 					
 					// Dispose the ghost (collider and children)
+					// Note: hitBody.transformNode is usually the Collider in this setup
 					hitBody.transformNode.dispose();
 				}
 				
@@ -183,8 +224,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// --- Helper: Face Target ---
 	const faceTarget = () => {
-		if (currentTarget && !currentTarget.isDisposed()) {
-			const dir = currentTarget.absolutePosition.subtract(playerVisual.absolutePosition);
+		if (currentTargetRoot && !currentTargetRoot.isDisposed()) {
+			const dir = currentTargetRoot.absolutePosition.subtract(playerVisual.absolutePosition);
 			// Calculate angle to target (Y rotation)
 			const desiredAngle = Math.atan2(dir.x, dir.z);
 			
@@ -241,13 +282,49 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				pickedMesh = hit.pickedMesh;
 			}
 			
-			// Target if clicking a ghost (or its collider)
-			if (pickedMesh && (pickedMesh.name.includes('ghost') || pickedMesh.parent?.name?.includes('ghost'))) {
-				// If we hit a child (like head/skirt), target the parent collider if possible, or the mesh itself
-				// Our logic uses the collider for physics, but highlighting works on meshes.
-				setTarget(pickedMesh);
+			// --- UPDATED: Target Selection Logic ---
+			if (pickedMesh) {
+				// Traverse up to find if this mesh belongs to a ghost
+				let node = pickedMesh;
+				let ghostRoot = null;
+				
+				// Look for a parent named 'ghost_' or similar, or the collider
+				// Structure: Collider -> ghost_X (Visual Root) -> Head/Skirt
+				while (node) {
+					if (node.name.includes('ghost')) {
+						// Found a ghost part.
+						// We want to target the Visual Root (ghost_X) usually,
+						// or the Collider if that's the main parent.
+						// In game-scene-alt.js: Collider -> ghost_X -> Head
+						
+						// If we hit Head, parent is ghost_X.
+						// If we hit Collider (unlikely as it is invisible/unpickable usually, but physics ray might hit it), it is the root.
+						
+						// Let's try to find the specific "ghost_X" node (Visual Root) to be the target anchor
+						// because that holds the visual meshes as children.
+						
+						if (node.name.startsWith('ghost_') && !node.name.includes('Collider')) {
+							ghostRoot = node;
+							break;
+						}
+						
+						// If we are at the collider level, look for the visual child
+						if (node.name.startsWith('ghostCollider_')) {
+							const children = node.getChildren();
+							ghostRoot = children.find(c => c.name.startsWith('ghost_'));
+							break;
+						}
+					}
+					node = node.parent;
+				}
+				
+				if (ghostRoot) {
+					setTarget(ghostRoot);
+				} else {
+					// Clicked something else (wall, ground)
+					setTarget(null);
+				}
 			} else {
-				// If we clicked a wall, ground, or sky, clear the target
 				setTarget(null);
 			}
 		}
@@ -270,7 +347,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const isFPS = (camera.name === 'firstPersonCam');
 		
 		// Show crosshair if in FPS mode AND no target is selected
-		if (isFPS && !currentTarget) {
+		if (isFPS && !currentTargetRoot) {
 			if (!crosshair.isEnabled() || crosshair.parent !== camera) {
 				crosshair.setEnabled(true);
 				crosshair.parent = camera;
@@ -314,7 +391,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		}
 		
 		// Cleanup Target Highlight if target disposed externally
-		if (currentTarget && currentTarget.isDisposed()) {
+		if (currentTargetRoot && currentTargetRoot.isDisposed()) {
 			setTarget(null);
 		}
 	});
