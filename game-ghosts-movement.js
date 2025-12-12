@@ -56,7 +56,8 @@ export const initGhostMovement = (scene, ghostEntity, playerRoot, playerVisual, 
 		
 		// 1. Update Metadata (Power Prediction)
 		const distToPlayer = BABYLON.Vector3.Distance(collider.position, playerRoot.position);
-		let predictedPower = Math.max(0.1, Math.min(1.0, 1.0 - (distToPlayer / 30.0)));
+		// Updated: Increased falloff distance to 50.0 for stronger shots at range
+		let predictedPower = Math.max(0.1, Math.min(1.0, 1.0 - (distToPlayer / 50.0)));
 		if (collider.metadata.energy < predictedPower * 10) {
 			predictedPower = collider.metadata.energy / 10;
 		}
@@ -194,9 +195,11 @@ export const initGhostMovement = (scene, ghostEntity, playerRoot, playerVisual, 
 		// C. Fire
 		if (hasLineOfSight) {
 			const currentDist = BABYLON.Vector3.Distance(collider.position, playerRoot.position);
-			let power = Math.max(0.1, Math.min(1.0, 1.0 - (currentDist / 30.0)));
+			// Updated: Use 50.0 divisor for stronger power at range
+			let power = Math.max(0.1, Math.min(1.0, 1.0 - (currentDist / 50.0)));
 			
-			if (power > 0.5 && Math.random() < 0.3) power *= 0.5;
+			// Removed random power dampening to make ghosts more aggressive
+			// if (power > 0.5 && Math.random() < 0.3) power *= 0.5;
 			
 			let cost = power * 10;
 			if (collider.metadata.energy < cost) {
@@ -218,10 +221,14 @@ export const initGhostMovement = (scene, ghostEntity, playerRoot, playerVisual, 
 				collider.metadata.nextType,
 				power,
 				playerMethods,
-				timeManager
+				timeManager,
+				ghostName // Pass name for logging
 			);
 			
 			await waitGameTime(0.5);
+		} else {
+			// Log missing LOS
+			console.log(`[LOS] ${ghostName} CANNOT see the player.`);
 		}
 		
 		// D. Return & Reset

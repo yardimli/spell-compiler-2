@@ -77,7 +77,7 @@ export const initBulletSystem = (scene, timeManager) => {
 };
 
 // --- Fire Logic ---
-export const fireGhostBullet = (scene, originPos, direction, type, power, playerMethods, timeManager) => {
+export const fireGhostBullet = (scene, originPos, direction, type, power, playerMethods, timeManager, shooterName) => {
 	const bullet = BABYLON.MeshBuilder.CreateSphere('enemyBullet', { diameter: 0.4 }, scene);
 	const bulletMat = new BABYLON.StandardMaterial('enemyBulletMat', scene);
 	
@@ -92,7 +92,8 @@ export const fireGhostBullet = (scene, originPos, direction, type, power, player
 		type: type,
 		power: power,
 		age: 0,
-		maxLife: lifetime
+		maxLife: lifetime,
+		shooter: shooterName || 'Unknown Ghost'
 	};
 	
 	// Initial Scaling
@@ -120,15 +121,23 @@ export const fireGhostBullet = (scene, originPos, direction, type, power, player
 		const hitName = hit.transformNode.name;
 		
 		if (hitName === 'playerRoot' || hitName === 'playerVisual') {
+			let effectMsg = '';
 			if (type === 'fire') {
 				const damage = Math.ceil(10 * power);
 				playerMethods.takeDamage(damage);
+				effectMsg = `${damage} Damage`;
 				createImpactParticles(scene, bullet.absolutePosition, 'fire', timeManager);
 			} else {
 				const slowDuration = 5.0 * power;
 				playerMethods.applyFrost(slowDuration);
+				effectMsg = `${slowDuration.toFixed(1)}s Slow`;
 				createImpactParticles(scene, bullet.absolutePosition, 'frost', timeManager);
 			}
+			
+			// Log Hit Details
+			const currentHealth = playerMethods.getHealth ? playerMethods.getHealth() : '?';
+			console.log(`[HIT] ${bullet.metadata.shooter} hit Player with ${type.toUpperCase()} (Power: ${power.toFixed(2)}). Effect: ${effectMsg}. Player Energy: ${currentHealth}.`);
+			
 		} else {
 			createImpactParticles(scene, bullet.absolutePosition, 'neutral', timeManager);
 		}
