@@ -199,17 +199,20 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		const currentVel = new BABYLON.Vector3();
 		playerAgg.body.getLinearVelocityToRef(currentVel);
 		
-		// Apply Speed Multiplier (Frost Effect)
-		// Note: We do NOT multiply by timeScale here for velocity magnitude
-		// because the physics engine time step is already scaled.
-		// If we set velocity 15, and time is 0.1x, it moves 1.5 units/real-sec.
-		const targetVelocity = moveDir.scale(baseSpeed * speedMultiplier);
+		// Apply Speed Multiplier (Frost Effect) AND Time Scale
+		// We multiply by timeScale because we are manually setting velocity every frame.
+		// If time is slow, we want the player to cover less distance per frame.
+		const targetVelocity = moveDir.scale(baseSpeed * speedMultiplier * timeScale);
 		
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
 		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
 		
 		let yVel = currentVel.y;
-		if (isJumping && hit.hit) yVel = jumpForce;
+		if (isJumping && hit.hit) {
+			// Scale jump force by timeScale so jump height remains consistent
+			// (since gravity is also scaled by timeScale^2)
+			yVel = jumpForce * timeScale;
+		}
 		
 		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(targetVelocity.x, yVel, targetVelocity.z));
 	});

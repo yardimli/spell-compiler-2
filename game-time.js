@@ -14,7 +14,26 @@ export const initGameTime = (scene, uiManager) => {
 	
 	// Physics Engine Reference
 	const physicsPlugin = scene.getPhysicsEngine();
-	const defaultTimeStep = 1 / 60;
+	// We don't change timeStep anymore, we scale velocities/gravity
+	
+	// --- Helper: Scale Physics World ---
+	const scalePhysics = (factor) => {
+		if (!physicsPlugin) return;
+		
+		// Scale Velocities of all bodies
+		const bodies = physicsPlugin.getBodies();
+		bodies.forEach(body => {
+			// Linear Velocity
+			const linVel = new BABYLON.Vector3();
+			body.getLinearVelocityToRef(linVel);
+			body.setLinearVelocity(linVel.scale(factor));
+			
+			// Angular Velocity
+			const angVel = new BABYLON.Vector3();
+			body.getAngularVelocityToRef(angVel);
+			body.setAngularVelocity(angVel.scale(factor));
+		});
+	};
 	
 	// --- Public Methods ---
 	
@@ -25,10 +44,8 @@ export const initGameTime = (scene, uiManager) => {
 		activeTimer = DURATION;
 		timeScale = SLOW_MO_FACTOR;
 		
-		// Slow down physics
-		if (physicsPlugin) {
-			physicsPlugin.setTimeStep(defaultTimeStep * SLOW_MO_FACTOR);
-		}
+		// Apply Physics Scaling
+		scalePhysics(SLOW_MO_FACTOR);
 		
 		// Update UI
 		if (uiManager) {
@@ -43,10 +60,8 @@ export const initGameTime = (scene, uiManager) => {
 		cooldownTimer = COOLDOWN;
 		timeScale = 1.0;
 		
-		// Reset physics
-		if (physicsPlugin) {
-			physicsPlugin.setTimeStep(defaultTimeStep);
-		}
+		// Restore Physics Scaling (Inverse Factor)
+		scalePhysics(1.0 / SLOW_MO_FACTOR);
 		
 		// Update UI
 		if (uiManager) {

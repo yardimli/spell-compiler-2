@@ -66,6 +66,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 		else color = new BABYLON.Color3(0.8, 0.8, 0.8); // Neutral/Grey
 		
 		const count = 8;
+		const ts = timeManager ? timeManager.getTimeScale() : 1.0;
 		
 		for (let i = 0; i < count; i++) {
 			const p = BABYLON.MeshBuilder.CreatePolyhedron('p', { type: 1, size: 0.15 }, scene);
@@ -77,7 +78,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 			
 			const agg = new BABYLON.PhysicsAggregate(p, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.1 }, scene);
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
-			agg.body.applyImpulse(dir.scale(2), p.absolutePosition);
+			// Scale impulse by timeScale
+			agg.body.applyImpulse(dir.scale(2 * ts), p.absolutePosition);
 			
 			setTimeout(() => {
 				p.dispose();
@@ -329,7 +331,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 						bulletAgg.body.setGravityFactor(0);
 						
 						// Speed: Half of player (Player=20, so 10)
-						bulletAgg.body.applyImpulse(forward.scale(10), bullet.absolutePosition);
+						// Scale impulse by timeScale
+						const currentTs = timeManager ? timeManager.getTimeScale() : 1.0;
+						bulletAgg.body.applyImpulse(forward.scale(10 * currentTs), bullet.absolutePosition);
 						
 						// Bullet Collision Logic
 						bulletAgg.body.setCollisionCallbackEnabled(true);
@@ -429,9 +433,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 					
 				} else {
 					// --- Moving State ---
-					// Note: Physics engine handles the velocity integration over time.
-					// If we set velocity 6, and physics time step is 0.1, it moves 0.6 per real second.
-					const velocity = moveDir.scale(speed);
+					// Scale velocity by timeScale
+					const velocity = moveDir.scale(speed * ts);
 					const currentLinearVel = new BABYLON.Vector3();
 					ghostAgg.body.getLinearVelocityToRef(currentLinearVel);
 					

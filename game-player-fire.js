@@ -75,6 +75,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	// --- Explosion Logic ---
 	const createExplosion = (position, color = null) => {
 		const fragmentCount = 8;
+		const ts = timeManager ? timeManager.getTimeScale() : 1.0;
+		
 		for (let i = 0; i < fragmentCount; i++) {
 			const frag = BABYLON.MeshBuilder.CreatePolyhedron('frag', {
 				type: 1,
@@ -92,7 +94,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				restitution: 0.5
 			}, scene);
 			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
-			fragAgg.body.applyImpulse(dir.scale(5 + Math.random() * 5), frag.absolutePosition);
+			// Scale impulse by timeScale
+			fragAgg.body.applyImpulse(dir.scale((5 + Math.random() * 5) * ts), frag.absolutePosition);
 			
 			setTimeout(() => {
 				frag.dispose();
@@ -105,7 +108,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				const distance = BABYLON.Vector3.Distance(position, mesh.absolutePosition);
 				if (distance < 4.0) {
 					const direction = mesh.absolutePosition.subtract(position).normalize();
-					mesh.physicsBody.applyImpulse(direction.scale(10.0 * (1 - (distance / 4.0))), mesh.absolutePosition);
+					// Scale impulse by timeScale
+					mesh.physicsBody.applyImpulse(direction.scale(10.0 * (1 - (distance / 4.0)) * ts), mesh.absolutePosition);
 				}
 			}
 		});
@@ -151,7 +155,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			restitution: 0.8
 		}, scene);
 		bulletAgg.body.setGravityFactor(0);
-		bulletAgg.body.applyImpulse(aimDir.scale(power), bullet.absolutePosition);
+		
+		// Scale impulse by timeScale
+		const ts = timeManager ? timeManager.getTimeScale() : 1.0;
+		bulletAgg.body.applyImpulse(aimDir.scale(power * ts), bullet.absolutePosition);
 		
 		const bulletData = {
 			mesh: bullet,
