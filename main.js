@@ -32,25 +32,32 @@ const createScene = async function () {
 	// 1. Scene (Load Map)
 	const { shadowGenerator, playerStartPosition, ballSpawns } = await initGameScene(scene);
 	
-	// 2. Scene Alt (Balls)
-	await initGameSceneAlt(scene, shadowGenerator, ballSpawns);
-	
-	// 3. Player & Camera
+	// 2. Camera Manager Reference (Placeholder)
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
 	
-	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition);
+	// 3. UI System (Initialize first to pass callbacks to player)
+	// We need the real camera manager for UI buttons, but we can pass the ref object for now
+	// and update the ref's methods later, or initialize UI after camera.
+	// However, UI needs to be passed to Player. Player needs Camera.
+	// Solution: Init UI with the Ref.
+	const uiManager = initGameUI(scene, cameraManagerRef);
+	
+	// 4. Player
+	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition, uiManager);
 	const { playerRoot, playerVisual } = playerManager;
 	
+	// 5. Scene Alt (Ghosts/Enemies) - Now needs player info for AI
+	await initGameSceneAlt(scene, shadowGenerator, ballSpawns, playerRoot, playerManager);
+	
+	// 6. Real Camera
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
+	// Update the reference so Player and UI use the real camera logic
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	cameraManagerRef.setCameraMode = realCameraManager.setCameraMode;
 	cameraManagerRef.getCameraMode = realCameraManager.getCameraMode;
 	
-	// 4. Fire System (Real-time)
+	// 7. Fire System (Player Shooting)
 	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
-	
-	// 5. UI System
-	initGameUI(scene, realCameraManager);
 	
 	// Focus canvas so keyboard events (WASD) work immediately
 	canvas.focus();

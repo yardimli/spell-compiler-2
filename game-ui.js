@@ -72,8 +72,6 @@ export const initGameUI = (scene, cameraManager) => {
 	};
 	
 	// --- Sync UI with Camera State ---
-	// Since camera mode can change via keyboard shortcuts (1, 2, 3),
-	// we need to check the state regularly to update the UI buttons.
 	scene.onBeforeRenderObservable.add(() => {
 		updateButtonStyles();
 	});
@@ -97,5 +95,66 @@ export const initGameUI = (scene, cameraManager) => {
 	labelInfo.fontFamily = 'sans-serif';
 	rectInfo.addControl(labelInfo);
 	
-	return advancedTexture;
+	// --- NEW: Health Bar ---
+	const healthContainer = new GUI.Rectangle();
+	healthContainer.width = '200px';
+	healthContainer.height = '20px';
+	healthContainer.cornerRadius = 10;
+	healthContainer.color = 'white';
+	healthContainer.thickness = 2;
+	healthContainer.background = 'rgba(0, 0, 0, 0.5)';
+	healthContainer.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+	healthContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+	healthContainer.left = '20px';
+	healthContainer.top = '20px';
+	advancedTexture.addControl(healthContainer);
+	
+	const healthBar = new GUI.Rectangle();
+	healthBar.width = '100%'; // Starts full
+	healthBar.height = '100%';
+	healthBar.cornerRadius = 8;
+	healthBar.color = 'transparent';
+	healthBar.background = '#00ff00'; // Green
+	healthBar.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+	healthContainer.addControl(healthBar);
+	
+	const healthText = new GUI.TextBlock();
+	healthText.text = '100 / 100';
+	healthText.color = 'white';
+	healthText.fontSize = 12;
+	healthContainer.addControl(healthText);
+	
+	// --- NEW: Game Over Screen ---
+	const gameOverRect = new GUI.Rectangle();
+	gameOverRect.width = '100%';
+	gameOverRect.height = '100%';
+	gameOverRect.background = 'rgba(0, 0, 0, 0.8)';
+	gameOverRect.zIndex = 10;
+	gameOverRect.isVisible = false;
+	advancedTexture.addControl(gameOverRect);
+	
+	const gameOverText = new GUI.TextBlock();
+	gameOverText.text = 'GAME OVER';
+	gameOverText.color = 'red';
+	gameOverText.fontSize = 60;
+	gameOverText.fontWeight = 'bold';
+	gameOverRect.addControl(gameOverText);
+	
+	// --- Exposed Methods ---
+	return {
+		advancedTexture,
+		updateHealth: (current, max) => {
+			const percentage = Math.max(0, current / max);
+			healthBar.width = `${percentage * 100}%`;
+			healthText.text = `${Math.ceil(current)} / ${max}`;
+			
+			// Change color based on health
+			if (percentage > 0.5) healthBar.background = '#00ff00';
+			else if (percentage > 0.25) healthBar.background = '#ffff00';
+			else healthBar.background = '#ff0000';
+		},
+		showGameOver: () => {
+			gameOverRect.isVisible = true;
+		}
+	};
 };

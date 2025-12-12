@@ -1,6 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 
-export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
+export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoot, playerMethods) => {
 	// --- 3D Text (Kept from original) ---
 	const fontURL = './assets/fonts/Kenney%20Future%20Regular.json';
 	try {
@@ -56,6 +56,30 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 		console.error('Failed to create 3D text:', e);
 	}
 	
+	// --- Particle Helper ---
+	const createImpactParticles = (position, type) => {
+		const color = type === 'fire' ? new BABYLON.Color3(1, 0.2, 0) : new BABYLON.Color3(0.5, 0.8, 1);
+		const count = 5;
+		
+		for (let i = 0; i < count; i++) {
+			const p = BABYLON.MeshBuilder.CreatePolyhedron('p', { type: 1, size: 0.15 }, scene);
+			p.position = position.clone();
+			const mat = new BABYLON.StandardMaterial('pMat', scene);
+			mat.emissiveColor = color;
+			mat.disableLighting = true;
+			p.material = mat;
+			
+			const agg = new BABYLON.PhysicsAggregate(p, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.1 }, scene);
+			const dir = new BABYLON.Vector3(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize();
+			agg.body.applyImpulse(dir.scale(2), p.absolutePosition);
+			
+			setTimeout(() => {
+				p.dispose();
+				agg.dispose();
+			}, 500);
+		}
+	};
+	
 	// --- Ghost Enemy Logic ---
 	if (spawns && spawns.length > 0) {
 		// Define materials for different ghost types
@@ -63,7 +87,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 		const colors = {
 			2: new BABYLON.Color3(1, 0, 0), // Red
 			3: new BABYLON.Color3(0, 1, 0), // Green
-			4: new BABYLON.Color3(0, 0, 1)  // Blue
+			4: new BABYLON.Color3(0, 0, 1) // Blue
 		};
 		
 		Object.keys(colors).forEach(key => {
@@ -115,7 +139,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 			};
 			
 			createEye(-0.25); // Left Eye
-			createEye(0.25);  // Right Eye
+			createEye(0.25); // Right Eye
 			
 			shadowGenerator.addShadowCaster(head);
 			shadowGenerator.addShadowCaster(skirt);
@@ -155,10 +179,10 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 			// --- Movement Logic ---
 			const speed = 6.0;
 			const directions = [
-				new BABYLON.Vector3(0, 0, 1),  // Forward
+				new BABYLON.Vector3(0, 0, 1), // Forward
 				new BABYLON.Vector3(0, 0, -1), // Back
-				new BABYLON.Vector3(1, 0, 0),  // Right
-				new BABYLON.Vector3(-1, 0, 0)  // Left
+				new BABYLON.Vector3(1, 0, 0), // Right
+				new BABYLON.Vector3(-1, 0, 0) // Left
 			];
 			
 			// Pick random initial direction
@@ -166,9 +190,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 			
 			// State: Start by rotating to face the initial direction
 			let isRotating = true;
+			let isAttacking = false; // New State for shooting
 			
 			// Calculate initial target rotation based on direction
-			// We rotate the VISUAL mesh (ghostNode), not the collider
 			let targetRotY = Math.atan2(moveDir.x, moveDir.z);
 			
 			// Collision Callback
@@ -177,9 +201,13 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 			
 			let lastTurnTime = 0;
 			
+			// --- Shooting Timer ---
+			// Random start delay between 0 and 5 seconds, then interval of 8-10s
+			let nextFireTime = Date.now() + (Math.random() * 5000) + 8000;
+			
 			collisionObservable.add((event) => {
-				// If already rotating, ignore collisions (we are effectively stationary)
-				if (isRotating) return;
+				// If already rotating or attacking, ignore collisions
+				if (isRotating || isAttacking) return;
 				
 				const now = Date.now();
 				// Debounce to prevent rapid flipping
@@ -196,7 +224,6 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 					moveDir = moveDir.scale(-1);
 					
 					// 2. Set Target Rotation (Add 180 degrees / PI)
-					// We add PI to current rotation to ensure a smooth 180 turn
 					targetRotY = ghostNode.rotation.y + Math.PI;
 					
 					// 3. Enter Rotating State
@@ -210,7 +237,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 				}
 			});
 			
-			// Render Loop for Movement & Rotation
+			// Render Loop for Movement & Rotation & Shooting
 			const observer = scene.onBeforeRenderObservable.add(() => {
 				if (collider.isDisposed()) {
 					scene.onBeforeRenderObservable.remove(observer);
@@ -218,22 +245,147 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 				}
 				
 				const dt = scene.getEngine().getDeltaTime() / 1000;
+				const now = Date.now();
+				
+				// --- Shooting Logic ---
+				if (!isAttacking && !isRotating && now > nextFireTime) {
+					// Start Attack Sequence
+					isAttacking = true;
+					
+					// 1. Stop Movement
+					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+					
+					// 2. Calculate Angle to Player
+					const dirToPlayer = playerRoot.position.subtract(collider.position);
+					const angleToPlayer = Math.atan2(dirToPlayer.x, dirToPlayer.z);
+					
+					// 3. Store original rotation (movement direction)
+					const originalRotY = ghostNode.rotation.y;
+					
+					// 4. Sequence: Turn -> Fire -> Turn Back -> Resume
+					// We use a coroutine-like structure via setTimeout for simplicity in this loop
+					const performAttack = async () => {
+						// A. Turn to Player (Instant or fast lerp - doing instant for responsiveness logic, or we could animate)
+						// Let's animate the turn to player over 0.5s
+						let t = 0;
+						const startRot = ghostNode.rotation.y;
+						// Normalize angles
+						let diff = angleToPlayer - startRot;
+						while (diff > Math.PI) diff -= Math.PI * 2;
+						while (diff < -Math.PI) diff += Math.PI * 2;
+						const endRot = startRot + diff;
+						
+						// Simple animation loop helper
+						const animateTurn = (target, duration) => {
+							return new Promise(resolve => {
+								const startTime = Date.now();
+								const loop = () => {
+									const elapsed = (Date.now() - startTime) / 1000;
+									const pct = Math.min(elapsed / duration, 1);
+									ghostNode.rotation.y = BABYLON.Scalar.Lerp(startRot, target, pct);
+									if (pct < 1) requestAnimationFrame(loop);
+									else resolve();
+								};
+								loop();
+							});
+						};
+						
+						// Turn to player
+						ghostNode.rotation.y = endRot; // Snap for now to ensure accuracy, or implement smooth turn
+						
+						// B. Fire Bullet
+						const bulletType = Math.random() > 0.5 ? 'fire' : 'frost';
+						const bullet = BABYLON.MeshBuilder.CreateSphere('enemyBullet', { diameter: 0.4 }, scene);
+						const bulletMat = new BABYLON.StandardMaterial('enemyBulletMat', scene);
+						
+						if (bulletType === 'fire') {
+							bulletMat.diffuseColor = new BABYLON.Color3(1, 0.5, 0); // Orange
+							bulletMat.emissiveColor = new BABYLON.Color3(1, 0, 0);
+						} else {
+							bulletMat.diffuseColor = new BABYLON.Color3(0.5, 0.8, 1); // Light Blue
+							bulletMat.emissiveColor = new BABYLON.Color3(0, 0.5, 1);
+						}
+						bullet.material = bulletMat;
+						
+						// Position at ghost eye level
+						const spawnPos = collider.position.clone();
+						spawnPos.y += 1.0;
+						const forward = new BABYLON.Vector3(Math.sin(endRot), 0, Math.cos(endRot));
+						bullet.position = spawnPos.add(forward.scale(1.5));
+						
+						const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
+						bulletAgg.body.setGravityFactor(0);
+						
+						// Speed: Half of player (Player=20, so 10)
+						bulletAgg.body.applyImpulse(forward.scale(10), bullet.absolutePosition);
+						
+						// Bullet Collision Logic
+						bulletAgg.body.setCollisionCallbackEnabled(true);
+						const bObserver = bulletAgg.body.getCollisionObservable().add((bEvent) => {
+							const hit = bEvent.collidedAgainst;
+							if (!hit || !hit.transformNode) return;
+							const hitName = hit.transformNode.name;
+							
+							if (hitName === 'playerRoot' || hitName === 'playerVisual') {
+								// Hit Player
+								if (bulletType === 'fire') {
+									playerMethods.takeDamage(10);
+									createImpactParticles(bullet.absolutePosition, 'fire');
+								} else {
+									playerMethods.applyFrost();
+									createImpactParticles(bullet.absolutePosition, 'frost');
+								}
+							} else {
+								// Hit Wall or Ghost
+								createImpactParticles(bullet.absolutePosition, 'neutral');
+							}
+							
+							// Destroy Bullet
+							bullet.dispose();
+							bulletAgg.dispose();
+						});
+						
+						// Cleanup bullet after 5 seconds if no hit
+						setTimeout(() => {
+							if (!bullet.isDisposed()) {
+								bullet.dispose();
+								bulletAgg.dispose();
+							}
+						}, 5000);
+						
+						// C. Wait a moment
+						await new Promise(r => setTimeout(r, 500));
+						
+						// D. Turn Back to Movement Direction
+						ghostNode.rotation.y = originalRotY;
+						
+						// E. Resume
+						isAttacking = false;
+						// Set next fire time (8-10 seconds)
+						nextFireTime = Date.now() + (Math.random() * 2000) + 8000;
+					};
+					
+					performAttack();
+				}
+				
+				if (isAttacking) {
+					// Ensure velocity is zero while attacking
+					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+					return;
+				}
 				
 				if (isRotating) {
 					// --- Rotation State ---
-					// Interpolate rotation of the VISUAL mesh towards target
 					const rotationSpeed = 5.0;
 					const diff = Math.abs(targetRotY - ghostNode.rotation.y);
 					
 					if (diff < 0.05) {
-						// Snap and switch to moving
 						ghostNode.rotation.y = targetRotY;
 						isRotating = false;
 					} else {
 						ghostNode.rotation.y = BABYLON.Scalar.Lerp(ghostNode.rotation.y, targetRotY, rotationSpeed * dt);
 					}
 					
-					// Ensure zero horizontal velocity while rotating
 					const vel = new BABYLON.Vector3();
 					ghostAgg.body.getLinearVelocityToRef(vel);
 					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(0, vel.y, 0));
@@ -244,13 +396,11 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns) => {
 					const currentLinearVel = new BABYLON.Vector3();
 					ghostAgg.body.getLinearVelocityToRef(currentLinearVel);
 					
-					// Apply velocity (preserve gravity)
 					ghostAgg.body.setLinearVelocity(new BABYLON.Vector3(velocity.x, currentLinearVel.y, velocity.z));
 					
-					// Stuck Check: If velocity is very low but we aren't meant to be stopped
+					// Stuck Check
 					const horizontalSpeed = Math.sqrt(currentLinearVel.x ** 2 + currentLinearVel.z ** 2);
 					if (horizontalSpeed < 0.5 && Date.now() - lastTurnTime > 1000) {
-						// Force a turn
 						moveDir = moveDir.scale(-1);
 						targetRotY = ghostNode.rotation.y + Math.PI;
 						isRotating = true;

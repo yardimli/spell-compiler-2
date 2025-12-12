@@ -1,22 +1,29 @@
 import * as BABYLON from '@babylonjs/core';
 
-export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition) => {
+export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition, uiManager) => {
 	const playerHeight = 4;
 	const playerRadius = 1;
-	const speed = 15.0;
+	const baseSpeed = 15.0; // Renamed to baseSpeed
 	const jumpForce = 8.0;
 	
-	// --- CHANGED: Dynamic Rotation Speed Parameters ---
-	// Start slow for fine adjustments, speed up for turning around
+	// --- Player State ---
+	let health = 100;
+	const maxHealth = 100;
+	let isDead = false;
+	
+	// Frost Effect State
+	let speedMultiplier = 1.0;
+	let frostTimeout = null;
+	
+	// Dynamic Rotation Speed Parameters
 	const minRotationSpeed = 0.01;
 	const maxRotationSpeed = 0.08;
-	const rotationAcceleration = 0.002; // How much speed increases per frame
+	const rotationAcceleration = 0.002;
 	let currentRotationSpeed = minRotationSpeed;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
 	
-	// Use the passed start position, or default if null
 	if (startPosition) {
 		playerRoot.position.copyFrom(startPosition);
 	} else {
@@ -65,9 +72,63 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		}
 	});
 	
+	// --- Public Methods for Damage/Status ---
+	const takeDamage = (amount) => {
+		if (isDead) return;
+		health -= amount;
+		if (health < 0) health = 0;
+		
+		// Update UI
+		if (uiManager && uiManager.updateHealth) {
+			uiManager.updateHealth(health, maxHealth);
+		}
+		
+		// Flash Red
+		const originalColor = playerMat.diffuseColor.clone();
+		playerMat.diffuseColor = new BABYLON.Color3(1, 0, 0);
+		setTimeout(() => {
+			if (!isDead) playerMat.diffuseColor = originalColor;
+		}, 200);
+		
+		if (health <= 0) {
+			die();
+		}
+	};
+	
+	const applyFrost = () => {
+		if (isDead) return;
+		
+		// Slow speed by half
+		speedMultiplier = 0.5;
+		
+		// Visual indication (Blue)
+		playerMat.diffuseColor = new BABYLON.Color3(0.5, 0.8, 1.0);
+		
+		// Reset timer if already frozen
+		if (frostTimeout) clearTimeout(frostTimeout);
+		
+		frostTimeout = setTimeout(() => {
+			if (!isDead) {
+				speedMultiplier = 1.0;
+				playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0); // Reset color
+			}
+		}, 3000); // 3 seconds
+	};
+	
+	const die = () => {
+		isDead = true;
+		if (uiManager && uiManager.showGameOver) {
+			uiManager.showGameOver();
+		}
+		// Disable physics movement
+		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+		// Optional: Tip over
+		playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(1, 1, 1) });
+	};
+	
 	// --- Main Update Loop ---
 	scene.onBeforeRenderObservable.add(() => {
-		if (!playerAgg.body) return;
+		if (!playerAgg.body || isDead) return;
 		
 		const dt = scene.getEngine().getDeltaTime() / 1000;
 		const camera = cameraManager.getActiveCamera();
@@ -80,10 +141,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		
 		// Direction Calculation
 		if (isFirstPerson) {
-			// --- CHANGED: FPS Movement (Strafe + Look) ---
-			// Camera controls rotation (Mouse Look).
-			// WASD controls movement relative to Camera.
-			
 			const camForward = camera.getDirection(BABYLON.Vector3.Forward());
 			camForward.y = 0; camForward.normalize();
 			
@@ -95,56 +152,40 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 			
 			moveDir = camForward.scale(z).add(camRight.scale(x));
 			
-			// If moving, align player body to camera look direction
 			if (moveDir.lengthSquared() > 0.001) {
 				playerVisual.rotation.y = camera.rotation.y;
 			}
 			
 		} else {
-			// TPS / Free Cam Movement relative to camera view
 			let z = (inputMap['w']) ? 1 : 0; z -= (inputMap['s']) ? 1 : 0;
 			let x = (inputMap['d']) ? 1 : 0; x -= (inputMap['a']) ? 1 : 0;
 			
-			// Only calculate direction if keys are pressed
 			if (z !== 0 || x !== 0) {
 				const camForward = camera.getDirection(BABYLON.Vector3.Forward());
 				camForward.y = 0; camForward.normalize();
 				const camRight = camera.getDirection(BABYLON.Vector3.Right());
 				camRight.y = 0; camRight.normalize();
 				
-				// Calculate desired move direction
 				const desiredDir = camForward.scale(z).add(camRight.scale(x)).normalize();
 				
-				// --- Shortest Path Rotation & Turn-Before-Move Logic ---
-				
-				// 1. Calculate target angle
 				const targetRotation = Math.atan2(desiredDir.x, desiredDir.z);
-				
-				// 2. Calculate difference between current and target
 				let diff = targetRotation - playerVisual.rotation.y;
 				
-				// 3. Normalize difference to -PI to +PI for shortest turn
 				while (diff > Math.PI) diff -= Math.PI * 2;
 				while (diff < -Math.PI) diff += Math.PI * 2;
 				
-				// 4. Rotate towards target
-				const turnSpeed = 10.0; // Radians per second
+				const turnSpeed = 10.0;
 				const step = turnSpeed * dt;
 				
 				if (Math.abs(diff) > step) {
-					// Rotate by step in the correct direction
 					playerVisual.rotation.y += Math.sign(diff) * step;
 				} else {
-					// Snap to target if close enough
 					playerVisual.rotation.y = targetRotation;
 				}
 				
-				// 5. Only allow movement if we are roughly facing the target
-				// Threshold of ~11 degrees (0.2 radians)
 				if (Math.abs(diff) < 0.2) {
 					moveDir = desiredDir;
 				} else {
-					// If turning, do not add movement force yet
 					moveDir = new BABYLON.Vector3(0, 0, 0);
 				}
 			}
@@ -152,13 +193,13 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		
 		const isJumping = inputMap[' '];
 		
-		// Physics Application
 		if (moveDir.length() > 0) moveDir.normalize();
 		const currentVel = new BABYLON.Vector3();
 		playerAgg.body.getLinearVelocityToRef(currentVel);
-		const targetVelocity = moveDir.scale(speed);
 		
-		// Raycast for ground check
+		// Apply Speed Multiplier (Frost Effect)
+		const targetVelocity = moveDir.scale(baseSpeed * speedMultiplier);
+		
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
 		const hit = scene.pickWithRay(ray, (mesh) => mesh !== playerRoot && mesh !== playerVisual);
 		
@@ -170,6 +211,8 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	
 	return {
 		playerRoot,
-		playerVisual
+		playerVisual,
+		takeDamage,
+		applyFrost
 	};
 };
