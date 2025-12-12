@@ -4,6 +4,8 @@ this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilatio
 
 #SLOW MOTION GAMEPLAY TODO
 
+- refactor game-scene-alt to game-ghost-create, game-ghosts-movement, and game-ghost-bullet
+
 - create two list of 10 strings of random words that will be combined to name the ghosts.
 - add an option to the ui to show ghosts names above them on/off
 - when time to fire comes console log if a ghost (with name) can see the player, or not

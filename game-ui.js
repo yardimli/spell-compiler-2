@@ -17,7 +17,7 @@ export const initGameUI = (scene, cameraManager) => {
 	
 	// --- Top Panel (Camera Controls) ---
 	const topPanel = new GUI.StackPanel();
-	topPanel.width = '550px';
+	topPanel.width = '700px'; // Increased width to accommodate new button
 	topPanel.height = '60px';
 	topPanel.isVertical = false;
 	topPanel.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
@@ -84,10 +84,31 @@ export const initGameUI = (scene, cameraManager) => {
 	slowMoText.isHitTestVisible = false;
 	btnSlowMo.addControl(slowMoText);
 	
+	// --- Ghost Names Toggle Button ---
+	let showGhostNames = false;
+	const ghostLabels = []; // Store references to labels
+	
+	const toggleNames = () => {
+		showGhostNames = !showGhostNames;
+		btnNames.background = showGhostNames ? '#007bff' : 'rgba(0, 0, 0, 0.7)';
+		// Update visibility of all existing labels
+		ghostLabels.forEach(label => {
+			if (label && !label.isDisposed) {
+				label.isVisible = showGhostNames;
+			}
+		});
+	};
+	
+	const btnNames = createButton('btnNames', 'Names: OFF', () => {
+		toggleNames();
+		btnNames.children[0].text = showGhostNames ? 'Names: ON' : 'Names: OFF';
+	});
+	
 	topPanel.addControl(btnFollow);
 	topPanel.addControl(btnFirst);
 	topPanel.addControl(btnFree);
 	topPanel.addControl(btnSlowMo);
+	topPanel.addControl(btnNames); // Add new button
 	
 	// Function to update visual state of buttons
 	const updateButtonStyles = () => {
@@ -263,6 +284,38 @@ export const initGameUI = (scene, cameraManager) => {
 		}, 2000);
 	};
 	
+	// --- Create Persistent Ghost Label ---
+	const createGhostLabel = (mesh, name) => {
+		const label = new GUI.TextBlock();
+		label.text = name;
+		label.color = 'white';
+		label.fontSize = 14;
+		label.fontWeight = 'bold';
+		label.outlineWidth = 2;
+		label.outlineColor = 'black';
+		
+		advancedTexture.addControl(label);
+		label.linkWithMesh(mesh);
+		label.linkOffsetY = -100; // Position above the ghost
+		
+		// Set initial visibility based on toggle state
+		label.isVisible = showGhostNames;
+		
+		// Store for toggling later
+		ghostLabels.push(label);
+		
+		// Clean up if mesh is disposed
+		mesh.onDisposeObservable.add(() => {
+			label.dispose();
+			const index = ghostLabels.indexOf(label);
+			if (index > -1) {
+				ghostLabels.splice(index, 1);
+			}
+		});
+		
+		return label;
+	};
+	
 	// --- Exposed Methods ---
 	return {
 		advancedTexture,
@@ -280,8 +333,7 @@ export const initGameUI = (scene, cameraManager) => {
 				btnSlowMo.background = 'rgba(50, 50, 50, 0.7)';
 				btnSlowMo.isHitTestVisible = false;
 				
-				// Update Progress Bar Width (Inverse: fills up as cooldown finishes, or drains?
-				// Let's make it drain: 100% at start of cooldown, 0% at end)
+				// Update Progress Bar Width
 				const percent = (cooldown / maxCooldown) * 100;
 				slowMoProgress.width = `${percent}%`;
 			} else {
@@ -293,6 +345,7 @@ export const initGameUI = (scene, cameraManager) => {
 		},
 		createBulletDebugWindow,
 		createGhostDebugWindow,
+		createGhostLabel, // Exported new method
 		updateHealth: (current, max) => {
 			const percentage = Math.max(0, current / max);
 			healthBar.width = `${percentage * 100}%`;

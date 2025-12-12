@@ -71,6 +71,17 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	});
 	
 	// --- Public Methods for Damage/Status ---
+	const die = () => {
+		isDead = true;
+		if (uiManager && uiManager.showGameOver) {
+			uiManager.showGameOver();
+		}
+		// Disable physics movement
+		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
+		// Optional: Tip over
+		playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(1, 1, 1) });
+	};
+	
 	const takeDamage = (amount) => {
 		if (isDead) return;
 		health -= amount;
@@ -93,7 +104,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		}
 	};
 	
-	// Modified: applyFrost now accepts duration in seconds
 	const applyFrost = (durationSeconds = 3.0) => {
 		if (isDead) return;
 		
@@ -112,17 +122,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 				playerMat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1.0); // Reset color
 			}
 		}, durationSeconds * 1000); // Convert to ms
-	};
-	
-	const die = () => {
-		isDead = true;
-		if (uiManager && uiManager.showGameOver) {
-			uiManager.showGameOver();
-		}
-		// Disable physics movement
-		playerAgg.body.setLinearVelocity(new BABYLON.Vector3(0, 0, 0));
-		// Optional: Tip over
-		playerAgg.body.setMassProperties({ inertia: new BABYLON.Vector3(1, 1, 1) });
 	};
 	
 	// --- Main Update Loop ---
@@ -200,8 +199,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		playerAgg.body.getLinearVelocityToRef(currentVel);
 		
 		// Apply Speed Multiplier (Frost Effect) AND Time Scale
-		// We multiply by timeScale because we are manually setting velocity every frame.
-		// If time is slow, we want the player to cover less distance per frame.
 		const targetVelocity = moveDir.scale(baseSpeed * speedMultiplier * timeScale);
 		
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);
@@ -209,8 +206,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		
 		let yVel = currentVel.y;
 		if (isJumping && hit.hit) {
-			// Scale jump force by timeScale so jump height remains consistent
-			// (since gravity is also scaled by timeScale^2)
 			yVel = jumpForce * timeScale;
 		}
 		
@@ -221,6 +216,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		playerRoot,
 		playerVisual,
 		takeDamage,
-		applyFrost
+		applyFrost,
+		getHealth: () => health // Explicitly included here
 	};
 };
