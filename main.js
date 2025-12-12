@@ -9,6 +9,7 @@ import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
 import { initGameUI } from './game-ui';
+import { initGameTime } from './game-time'; // New Import
 
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
@@ -35,29 +36,31 @@ const createScene = async function () {
 	// 2. Camera Manager Reference (Placeholder)
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
 	
-	// 3. UI System (Initialize first to pass callbacks to player)
-	// We need the real camera manager for UI buttons, but we can pass the ref object for now
-	// and update the ref's methods later, or initialize UI after camera.
-	// However, UI needs to be passed to Player. Player needs Camera.
-	// Solution: Init UI with the Ref.
+	// 3. UI System
 	const uiManager = initGameUI(scene, cameraManagerRef);
 	
-	// 4. Player
-	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition, uiManager);
+	// 4. Time Manager (New)
+	const timeManager = initGameTime(scene, uiManager);
+	
+	// 5. Player (Pass timeManager)
+	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition, uiManager, timeManager);
 	const { playerRoot, playerVisual } = playerManager;
 	
-	// 5. Scene Alt (Ghosts/Enemies) - Now needs player info for AI
-	await initGameSceneAlt(scene, shadowGenerator, ballSpawns, playerRoot, playerManager);
+	// 6. Scene Alt (Ghosts/Enemies) - Pass timeManager and uiManager
+	await initGameSceneAlt(scene, shadowGenerator, ballSpawns, playerRoot, playerManager, timeManager, uiManager);
 	
-	// 6. Real Camera
+	// 7. Real Camera
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
 	// Update the reference so Player and UI use the real camera logic
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	cameraManagerRef.setCameraMode = realCameraManager.setCameraMode;
 	cameraManagerRef.getCameraMode = realCameraManager.getCameraMode;
 	
-	// 7. Fire System (Player Shooting)
-	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager);
+	// 8. Fire System (Player Shooting) - Pass timeManager
+	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, timeManager);
+	
+	// Connect UI Slow Mo Button to Time Manager
+	uiManager.setSlowMotionCallback(() => timeManager.toggleSlowMotion());
 	
 	// Focus canvas so keyboard events (WASD) work immediately
 	canvas.focus();

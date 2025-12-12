@@ -1,9 +1,9 @@
 import * as BABYLON from '@babylonjs/core';
 
-export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition, uiManager) => {
+export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosition, uiManager, timeManager) => {
 	const playerHeight = 4;
 	const playerRadius = 1;
-	const baseSpeed = 15.0; // Renamed to baseSpeed
+	const baseSpeed = 15.0;
 	const jumpForce = 8.0;
 	
 	// --- Player State ---
@@ -14,12 +14,6 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	// Frost Effect State
 	let speedMultiplier = 1.0;
 	let frostTimeout = null;
-	
-	// Dynamic Rotation Speed Parameters
-	const minRotationSpeed = 0.01;
-	const maxRotationSpeed = 0.08;
-	const rotationAcceleration = 0.002;
-	let currentRotationSpeed = minRotationSpeed;
 	
 	// 1. Player Root (Physics Body) - Invisible
 	const playerRoot = BABYLON.MeshBuilder.CreateCapsule('playerRoot', { height: playerHeight, radius: playerRadius }, scene);
@@ -67,6 +61,10 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		const key = kbInfo.event.key.toLowerCase();
 		if (type === BABYLON.KeyboardEventTypes.KEYDOWN) {
 			inputMap[key] = true;
+			// Toggle Slow Motion
+			if (key === 'g' && timeManager) {
+				timeManager.toggleSlowMotion();
+			}
 		} else if (type === BABYLON.KeyboardEventTypes.KEYUP) {
 			inputMap[key] = false;
 		}
@@ -130,7 +128,11 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 	scene.onBeforeRenderObservable.add(() => {
 		if (!playerAgg.body || isDead) return;
 		
-		const dt = scene.getEngine().getDeltaTime() / 1000;
+		// Get Time Scale
+		const timeScale = timeManager ? timeManager.getTimeScale() : 1.0;
+		// Scale dt for manual calculations (like rotation)
+		const dt = (scene.getEngine().getDeltaTime() / 1000) * timeScale;
+		
 		const camera = cameraManager.getActiveCamera();
 		const isFirstPerson = (camera.name === 'firstPersonCam');
 		
@@ -175,7 +177,7 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 				while (diff < -Math.PI) diff += Math.PI * 2;
 				
 				const turnSpeed = 10.0;
-				const step = turnSpeed * dt;
+				const step = turnSpeed * dt; // Scaled dt
 				
 				if (Math.abs(diff) > step) {
 					playerVisual.rotation.y += Math.sign(diff) * step;
@@ -198,6 +200,9 @@ export const initGamePlayer = (scene, shadowGenerator, cameraManager, startPosit
 		playerAgg.body.getLinearVelocityToRef(currentVel);
 		
 		// Apply Speed Multiplier (Frost Effect)
+		// Note: We do NOT multiply by timeScale here for velocity magnitude
+		// because the physics engine time step is already scaled.
+		// If we set velocity 15, and time is 0.1x, it moves 1.5 units/real-sec.
 		const targetVelocity = moveDir.scale(baseSpeed * speedMultiplier);
 		
 		const ray = new BABYLON.Ray(playerRoot.position, new BABYLON.Vector3(0, -1, 0), (playerHeight / 2) + 0.1);

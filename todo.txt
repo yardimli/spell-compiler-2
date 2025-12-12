@@ -4,14 +4,23 @@ this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilatio
 
 #SLOW MOTION GAMEPLAY TODO
 
-- add a button for slow motion toggle on/off on the UI, in slow motion mode everything moves at 10% speed including player movement, enemy movement, bullet speed etc.
-- in slow motion mode user can click on enemy bullets and see if they are fire or frost.
+- change slow motion button to also have a small progress bar inside it for cooldown time.
 
-- user has two types of shields they can activate with buttons or keys 'V' and 'B', shield 'V' blocks fire bullets, shield 'B' blocks frost bullets, each shield lasts for 10 seconds.
+- add a button for slow motion toggle on/off on the UI, in slow motion mode everything moves at 10% speed including player movement, enemy movement, bullet speed etc. also can be activated with the 'G' key.
+- in slow motion mode player can click on enemy bullets and see if they are fire or frost. show a debug window over the bullet that moves with it to indicate type and disappears after 2 seconds.
+- slow motion mode should have a slight blue tint to the screen to indicate it's active.
+- the mode should turn off automatically after 10 seconds. and have a cooldown of 10 seconds before it can be activated again. add a cooldown timer on the UI button for slow motion.
+
+- enemy bullets can be of two types fire and frost, at full power fire bullets do 10 damage to player health, frost bullets slow player movement speed by 50% for 5 seconds. but the ghosts can also fire at lower power levels that do less damage or slow effect.
+- in slow motion mode player can see the power level of the enemy bullets as well in the debug window.
+
+- player has two types of shields they can activate with buttons or keys 'V' and 'B', shield 'V' blocks fire bullets, shield 'B' blocks frost bullets, each shield lasts for 10 seconds.
 - using a shield will consume 3 health when cast.
 - add a visual effect around the player when a shield is active to indicate which shield is active, frost or fire.
 
+- killing a ghost should increase a score based on how far the ghost is from the player when killed, show score on the UI.
 - add health packs that spawn randomly in the arena every 15 seconds, when the player collects them increase health by 20 up to a max of 100.
+- each bullet should lower score by 1, if score is 0 bullets should only fire every 2 seconds.
 
 
 

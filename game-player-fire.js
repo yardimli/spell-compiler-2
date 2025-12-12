@@ -1,10 +1,10 @@
 import * as BABYLON from '@babylonjs/core';
 
-export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager) => {
+export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraManager, timeManager) => {
 	const bullets = [];
 	
 	// --- Target Selection State ---
-	let currentTargetRoot = null; // Changed to track the root of the target
+	let currentTargetRoot = null;
 	const highlightLayer = new BABYLON.HighlightLayer('targetHighlight', scene);
 	const targetColor = new BABYLON.Color3(0, 1, 1); // Cyan highlight
 	
@@ -26,7 +26,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		hLine.material = mat;
 		hLine.parent = crosshairRoot;
 		hLine.isPickable = false;
-		hLine.renderingGroupId = 1; // Render on top of scene (default is 0)
+		hLine.renderingGroupId = 1;
 		
 		// Vertical line
 		const vLine = BABYLON.MeshBuilder.CreatePlane('vLine', { width: 0.003, height: 0.05 }, scene);
@@ -55,19 +55,16 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// --- Set Target Logic ---
 	const setTarget = (rootNode) => {
-		// 1. Clear existing highlights
 		if (currentTargetRoot) {
 			const oldMeshes = getAllMeshes(currentTargetRoot);
 			oldMeshes.forEach(m => highlightLayer.removeMesh(m));
 		}
 		
-		// 2. Toggle off if clicking the same target
 		if (currentTargetRoot === rootNode) {
 			currentTargetRoot = null;
 			return;
 		}
 		
-		// 3. Set new target and highlight all its children
 		currentTargetRoot = rootNode;
 		if (currentTargetRoot) {
 			const newMeshes = getAllMeshes(currentTargetRoot);
@@ -130,21 +127,16 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		const camera = cameraManager.getActiveCamera();
 		const isFPS = (camera.name === 'firstPersonCam');
 		
-		// Check if target exists and is valid
 		if (currentTargetRoot && !currentTargetRoot.isDisposed()) {
-			// Aim at target
 			let targetPos = currentTargetRoot.absolutePosition.clone();
 			const head = currentTargetRoot.getChildren().find(c => c.name === 'head');
 			if (head) targetPos = head.absolutePosition.clone();
 			
 			aimDir = targetPos.subtract(spawnPos).normalize();
 		} else {
-			// FPS Aiming Logic
 			if (isFPS) {
-				// In FPS, aim where the camera is looking (center of screen)
 				aimDir = camera.getDirection(BABYLON.Vector3.Forward());
 			} else {
-				// Default (TPS): Aim forward based on player rotation (horizontal only)
 				const rotationMatrix = BABYLON.Matrix.RotationY(playerVisual.rotation.y);
 				aimDir = BABYLON.Vector3.TransformCoordinates(BABYLON.Vector3.Forward(), rotationMatrix).normalize();
 			}
@@ -176,15 +168,12 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			if (!hitBody || !hitBody.transformNode) return;
 			
 			const name = hitBody.transformNode.name;
-			// Check for walls, bullets, or ghosts
 			if (name.includes('wall') || name.includes('ghost') || name.includes('bullet')) {
 				createExplosion(bullet.absolutePosition);
 				
 				if (name.includes('ghost')) {
-					// Try to get color from the visual child (head or skirt)
 					const visualChildren = hitBody.transformNode.getChildren();
 					let explosionColor = null;
-					// Traverse to find a material
 					const findMat = (node) => {
 						if (node.material) return node.material.diffuseColor;
 						for (const child of node.getChildren()) {
@@ -197,12 +186,10 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					
 					createExplosion(hitBody.transformNode.absolutePosition, explosionColor);
 					
-					// If we destroyed our current target (or its parent), clear selection
 					if (currentTargetRoot && (currentTargetRoot === hitBody.transformNode || hitBody.transformNode.isDescendantOf(currentTargetRoot))) {
 						setTarget(null);
 					}
 					
-					// Dispose the ghost (collider and children)
 					hitBody.transformNode.dispose();
 				}
 				
@@ -216,24 +203,19 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	const faceTarget = () => {
 		if (currentTargetRoot && !currentTargetRoot.isDisposed()) {
 			const dir = currentTargetRoot.absolutePosition.subtract(playerVisual.absolutePosition);
-			// Calculate angle to target (Y rotation)
 			const desiredAngle = Math.atan2(dir.x, dir.z);
 			
-			// Shortest Path Calculation
 			const currentAngle = playerVisual.rotation.y;
 			let diff = desiredAngle - currentAngle;
 			
-			// Normalize difference to -PI to +PI
 			while (diff <= -Math.PI) diff += Math.PI * 2;
 			while (diff > Math.PI) diff -= Math.PI * 2;
 			
-			// Set target relative to current rotation to ensure shortest turn
 			targetRotation = currentAngle + diff;
 			
 			isTurning = true;
-			pendingShot = true; // Queue the shot to fire after turning
+			pendingShot = true;
 		} else {
-			// If no target, just fire immediately
 			spawnBullet();
 		}
 	};
@@ -245,20 +227,16 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			const camera = cameraManager.getActiveCamera();
 			const isFPS = (camera.name === 'firstPersonCam');
 			
-			// Check if pointer is locked (Standard Web API)
 			const canvas = scene.getEngine().getRenderingCanvas();
 			const isLocked = (document.pointerLockElement === canvas);
 			
-			// --- NEW: Fire on Click in FPS Mode (if locked) ---
 			if (isFPS && isLocked) {
 				spawnBullet();
-				return; // Stop here, do not perform target selection
+				return;
 			}
 			
-			// --- Existing Target Selection Logic (Only if not locked/firing) ---
 			let pickedMesh = null;
 			
-			// Use Picking Ray from Mouse Position
 			const ray = scene.createPickingRay(
 				scene.pointerX,
 				scene.pointerY,
@@ -267,17 +245,11 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			);
 			
 			const hit = scene.pickWithRay(ray, (mesh) => {
-				// Ignore the player visual and any children (like the cap)
 				if (mesh === playerVisual || mesh.isDescendantOf(playerVisual)) return false;
-				// Ignore the player root (parent of visual)
 				if (mesh === playerVisual.parent) return false;
-				// Explicitly ignore playerRoot by name if reference check fails
 				if (mesh.name === 'playerRoot') return false;
-				// Ignore bullets
 				if (mesh.name === 'bullet') return false;
-				// Ignore crosshair parts
 				if (mesh.name === 'hLine' || mesh.name === 'vLine') return false;
-				
 				return true;
 			});
 			
@@ -286,7 +258,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			}
 			
 			if (pickedMesh) {
-				// Traverse up to find if this mesh belongs to a ghost
 				let node = pickedMesh;
 				let ghostRoot = null;
 				
@@ -308,7 +279,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				if (ghostRoot) {
 					setTarget(ghostRoot);
 				} else {
-					// Clicked something else (wall, ground)
 					setTarget(null);
 				}
 			} else {
@@ -327,20 +297,18 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	// --- Update Loop (Bullet Cleanup & Smooth Turn) ---
 	scene.onBeforeRenderObservable.add(() => {
-		const dt = scene.getEngine().getDeltaTime() / 1000;
+		// Get Time Scale
+		const ts = timeManager ? timeManager.getTimeScale() : 1.0;
+		const dt = (scene.getEngine().getDeltaTime() / 1000) * ts;
 		
-		// --- Crosshair Visibility Logic ---
 		const camera = cameraManager.getActiveCamera();
 		const isFPS = (camera.name === 'firstPersonCam');
 		
-		// Show crosshair if in FPS mode AND no target is selected
 		if (isFPS && !currentTargetRoot) {
 			if (!crosshair.isEnabled() || crosshair.parent !== camera) {
 				crosshair.setEnabled(true);
 				crosshair.parent = camera;
-				// Position 1 unit in front of camera
 				crosshair.position = new BABYLON.Vector3(0, 0, 1);
-				// Reset rotation to match camera orientation
 				crosshair.rotation = new BABYLON.Vector3(0, 0, 0);
 			}
 		} else {
@@ -349,10 +317,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		
 		// Smooth Turn Logic
 		if (isTurning) {
-			// Smoothly interpolate current rotation towards target
 			playerVisual.rotation.y = BABYLON.Scalar.Lerp(playerVisual.rotation.y, targetRotation, 5.0 * dt);
 			
-			// Check difference
 			const diff = Math.abs(targetRotation - playerVisual.rotation.y);
 			
 			if (diff < 0.01) {
@@ -377,7 +343,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			}
 		}
 		
-		// Cleanup Target Highlight if target disposed externally
 		if (currentTargetRoot && currentTargetRoot.isDisposed()) {
 			setTarget(null);
 		}

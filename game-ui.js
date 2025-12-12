@@ -4,9 +4,20 @@ export const initGameUI = (scene, cameraManager) => {
 	// Create the advanced texture (fullscreen UI)
 	const advancedTexture = GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI', true, scene);
 	
+	// --- Slow Motion Tint Overlay ---
+	const slowMoOverlay = new GUI.Rectangle();
+	slowMoOverlay.width = '100%';
+	slowMoOverlay.height = '100%';
+	slowMoOverlay.background = 'rgba(0, 100, 255, 0.2)'; // Blue tint
+	slowMoOverlay.thickness = 0;
+	slowMoOverlay.isHitTestVisible = false; // Let clicks pass through
+	slowMoOverlay.isVisible = false;
+	slowMoOverlay.zIndex = -1; // Behind other UI
+	advancedTexture.addControl(slowMoOverlay);
+	
 	// --- Top Panel (Camera Controls) ---
 	const topPanel = new GUI.StackPanel();
-	topPanel.width = '400px';
+	topPanel.width = '550px'; // Increased width for new button
 	topPanel.height = '60px';
 	topPanel.isVertical = false;
 	topPanel.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
@@ -15,7 +26,7 @@ export const initGameUI = (scene, cameraManager) => {
 	advancedTexture.addControl(topPanel);
 	
 	// Helper to create styled buttons
-	const createButton = (name, text, mode) => {
+	const createButton = (name, text, callback) => {
 		const button = GUI.Button.CreateSimpleButton(name, text);
 		button.width = '120px';
 		button.height = '40px';
@@ -30,20 +41,27 @@ export const initGameUI = (scene, cameraManager) => {
 		button.fontWeight = 'bold';
 		
 		button.onPointerUpObservable.add(() => {
-			cameraManager.setCameraMode(mode);
-			// Styles update via observer
+			if (callback) callback();
 		});
 		
 		return button;
 	};
 	
-	const btnFollow = createButton('btnFollow', 'Follow (1)', 'follow');
-	const btnFirst = createButton('btnFirst', '1st Person (2)', 'first');
-	const btnFree = createButton('btnFree', 'Free (3)', 'free');
+	const btnFollow = createButton('btnFollow', 'Follow (1)', () => cameraManager.setCameraMode('follow'));
+	const btnFirst = createButton('btnFirst', '1st Person (2)', () => cameraManager.setCameraMode('first'));
+	const btnFree = createButton('btnFree', 'Free (3)', () => cameraManager.setCameraMode('free'));
+	
+	// --- Slow Motion Button ---
+	// Callback will be assigned later via setSlowMotionCallback to avoid circular dependency issues
+	let onSlowMoToggle = null;
+	const btnSlowMo = createButton('btnSlowMo', 'Slow Mo (G)', () => {
+		if (onSlowMoToggle) onSlowMoToggle();
+	});
 	
 	topPanel.addControl(btnFollow);
 	topPanel.addControl(btnFirst);
 	topPanel.addControl(btnFree);
+	topPanel.addControl(btnSlowMo);
 	
 	// Function to update visual state of buttons
 	const updateButtonStyles = () => {
@@ -56,11 +74,9 @@ export const initGameUI = (scene, cameraManager) => {
 			btn.background = isActive ? activeColor : inactiveColor;
 			
 			if (isActive) {
-				// Fade out and disable hit test so it doesn't block mouse input
 				btn.alpha = 0.5;
 				btn.isHitTestVisible = false;
 			} else {
-				// Restore visibility and interactivity
 				btn.alpha = 1.0;
 				btn.isHitTestVisible = true;
 			}
@@ -95,7 +111,7 @@ export const initGameUI = (scene, cameraManager) => {
 	labelInfo.fontFamily = 'sans-serif';
 	rectInfo.addControl(labelInfo);
 	
-	// --- NEW: Health Bar ---
+	// --- Health Bar ---
 	const healthContainer = new GUI.Rectangle();
 	healthContainer.width = '200px';
 	healthContainer.height = '20px';
@@ -110,11 +126,11 @@ export const initGameUI = (scene, cameraManager) => {
 	advancedTexture.addControl(healthContainer);
 	
 	const healthBar = new GUI.Rectangle();
-	healthBar.width = '100%'; // Starts full
+	healthBar.width = '100%';
 	healthBar.height = '100%';
 	healthBar.cornerRadius = 8;
 	healthBar.color = 'transparent';
-	healthBar.background = '#00ff00'; // Green
+	healthBar.background = '#00ff00';
 	healthBar.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
 	healthContainer.addControl(healthBar);
 	
@@ -124,7 +140,7 @@ export const initGameUI = (scene, cameraManager) => {
 	healthText.fontSize = 12;
 	healthContainer.addControl(healthText);
 	
-	// --- NEW: Game Over Screen ---
+	// --- Game Over Screen ---
 	const gameOverRect = new GUI.Rectangle();
 	gameOverRect.width = '100%';
 	gameOverRect.height = '100%';
@@ -140,15 +156,59 @@ export const initGameUI = (scene, cameraManager) => {
 	gameOverText.fontWeight = 'bold';
 	gameOverRect.addControl(gameOverText);
 	
+	// --- Bullet Debug Window Helper ---
+	const createBulletDebugWindow = (mesh, type) => {
+		const rect = new GUI.Rectangle();
+		rect.width = '100px';
+		rect.height = '40px';
+		rect.cornerRadius = 5;
+		rect.color = 'white';
+		rect.thickness = 1;
+		rect.background = 'rgba(0, 0, 0, 0.8)';
+		advancedTexture.addControl(rect);
+		rect.linkWithMesh(mesh);
+		rect.linkOffsetY = -50;
+		
+		const label = new GUI.TextBlock();
+		label.text = type.toUpperCase();
+		label.color = type === 'fire' ? 'orange' : 'cyan';
+		label.fontSize = 14;
+		label.fontWeight = 'bold';
+		rect.addControl(label);
+		
+		// Remove after 2 seconds
+		setTimeout(() => {
+			rect.dispose();
+		}, 2000);
+	};
+	
 	// --- Exposed Methods ---
 	return {
 		advancedTexture,
+		setSlowMotionCallback: (cb) => { onSlowMoToggle = cb; },
+		setSlowMotionActive: (isActive) => {
+			slowMoOverlay.isVisible = isActive;
+		},
+		updateSlowMotionButton: (isActive, cooldown) => {
+			if (isActive) {
+				btnSlowMo.children[0].text = 'ACTIVE';
+				btnSlowMo.background = '#007bff';
+			} else if (cooldown > 0) {
+				btnSlowMo.children[0].text = Math.ceil(cooldown) + 's';
+				btnSlowMo.background = 'rgba(50, 50, 50, 0.7)';
+				btnSlowMo.isHitTestVisible = false;
+			} else {
+				btnSlowMo.children[0].text = 'Slow Mo (G)';
+				btnSlowMo.background = 'rgba(0, 0, 0, 0.7)';
+				btnSlowMo.isHitTestVisible = true;
+			}
+		},
+		createBulletDebugWindow,
 		updateHealth: (current, max) => {
 			const percentage = Math.max(0, current / max);
 			healthBar.width = `${percentage * 100}%`;
 			healthText.text = `${Math.ceil(current)} / ${max}`;
 			
-			// Change color based on health
 			if (percentage > 0.5) healthBar.background = '#00ff00';
 			else if (percentage > 0.25) healthBar.background = '#ffff00';
 			else healthBar.background = '#ff0000';
