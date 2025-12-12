@@ -41,7 +41,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 	
 	const crosshair = createCrosshair();
 	
-	// --- NEW: Helper to recursively get all meshes from a root ---
+	// --- Helper to recursively get all meshes from a root ---
 	const getAllMeshes = (node, list = []) => {
 		if (node instanceof BABYLON.Mesh) {
 			list.push(node);
@@ -53,7 +53,7 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		return list;
 	};
 	
-	// --- UPDATED: Set Target Logic ---
+	// --- Set Target Logic ---
 	const setTarget = (rootNode) => {
 		// 1. Clear existing highlights
 		if (currentTargetRoot) {
@@ -132,15 +132,8 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		
 		// Check if target exists and is valid
 		if (currentTargetRoot && !currentTargetRoot.isDisposed()) {
-			// Aim at target (use absolute position of the root or a child)
-			// Since root might be a TransformNode at 0,0,0 relative to parent, use absolutePosition
-			// Note: TransformNodes have absolutePosition if updated.
-			// Better to aim at the center of the visual mass.
+			// Aim at target
 			let targetPos = currentTargetRoot.absolutePosition.clone();
-			
-			// If the root is the collider (invisible), aim slightly up?
-			// Or if it's the visual root.
-			// Let's try to find the 'head' child for better aiming if possible.
 			const head = currentTargetRoot.getChildren().find(c => c.name === 'head');
 			if (head) targetPos = head.absolutePosition.clone();
 			
@@ -149,7 +142,6 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 			// FPS Aiming Logic
 			if (isFPS) {
 				// In FPS, aim where the camera is looking (center of screen)
-				// This handles looking up/down
 				aimDir = camera.getDirection(BABYLON.Vector3.Forward());
 			} else {
 				// Default (TPS): Aim forward based on player rotation (horizontal only)
@@ -206,13 +198,11 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 					createExplosion(hitBody.transformNode.absolutePosition, explosionColor);
 					
 					// If we destroyed our current target (or its parent), clear selection
-					// Check if the hit node is part of the current target hierarchy
 					if (currentTargetRoot && (currentTargetRoot === hitBody.transformNode || hitBody.transformNode.isDescendantOf(currentTargetRoot))) {
 						setTarget(null);
 					}
 					
 					// Dispose the ghost (collider and children)
-					// Note: hitBody.transformNode is usually the Collider in this setup
 					hitBody.transformNode.dispose();
 				}
 				
@@ -253,6 +243,19 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
 			
 			const camera = cameraManager.getActiveCamera();
+			const isFPS = (camera.name === 'firstPersonCam');
+			
+			// Check if pointer is locked (Standard Web API)
+			const canvas = scene.getEngine().getRenderingCanvas();
+			const isLocked = (document.pointerLockElement === canvas);
+			
+			// --- NEW: Fire on Click in FPS Mode (if locked) ---
+			if (isFPS && isLocked) {
+				spawnBullet();
+				return; // Stop here, do not perform target selection
+			}
+			
+			// --- Existing Target Selection Logic (Only if not locked/firing) ---
 			let pickedMesh = null;
 			
 			// Use Picking Ray from Mouse Position
@@ -282,33 +285,17 @@ export const initGamePlayerFire = (scene, shadowGenerator, playerVisual, cameraM
 				pickedMesh = hit.pickedMesh;
 			}
 			
-			// --- UPDATED: Target Selection Logic ---
 			if (pickedMesh) {
 				// Traverse up to find if this mesh belongs to a ghost
 				let node = pickedMesh;
 				let ghostRoot = null;
 				
-				// Look for a parent named 'ghost_' or similar, or the collider
-				// Structure: Collider -> ghost_X (Visual Root) -> Head/Skirt
 				while (node) {
 					if (node.name.includes('ghost')) {
-						// Found a ghost part.
-						// We want to target the Visual Root (ghost_X) usually,
-						// or the Collider if that's the main parent.
-						// In game-scene-alt.js: Collider -> ghost_X -> Head
-						
-						// If we hit Head, parent is ghost_X.
-						// If we hit Collider (unlikely as it is invisible/unpickable usually, but physics ray might hit it), it is the root.
-						
-						// Let's try to find the specific "ghost_X" node (Visual Root) to be the target anchor
-						// because that holds the visual meshes as children.
-						
 						if (node.name.startsWith('ghost_') && !node.name.includes('Collider')) {
 							ghostRoot = node;
 							break;
 						}
-						
-						// If we are at the collider level, look for the visual child
 						if (node.name.startsWith('ghostCollider_')) {
 							const children = node.getChildren();
 							ghostRoot = children.find(c => c.name.startsWith('ghost_'));
