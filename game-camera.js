@@ -157,16 +157,6 @@ export const initGameCamera = (scene, canvas, playerRoot) => {
 		}
 	});
 	
-	// --- Handle Pointer Lock Change (ESC key) ---
-	document.addEventListener('pointerlockchange', () => {
-		// If lock is lost (user pressed ESC) and we are in first person
-		if (document.pointerLockElement === null && currentMode === 'first') {
-			// Reset pitch to look straight ahead (Horizon)
-			firstPersonCam.rotation.x = 0;
-			// We keep rotation.y (Yaw) so the player doesn't snap to a different direction horizontally
-		}
-	}, false);
-	
 	// --- Switching Logic ---
 	const setCameraMode = (mode) => {
 		if (currentMode === mode) return; // No change needed
