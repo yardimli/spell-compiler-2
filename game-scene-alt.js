@@ -88,7 +88,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 		}
 	};
 	
-	// --- Track Active Enemy Bullets for Scaling ---
+	// --- Track Active Enemy Bullets for Scaling and Cleanup ---
 	const activeEnemyBullets = [];
 	
 	// Listen for Slow Motion to Scale Enemy Bullets
@@ -102,6 +102,35 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 			});
 		});
 	}
+	
+	// Global loop for bullet cleanup (replaces setTimeout)
+	scene.onBeforeRenderObservable.add(() => {
+		const ts = timeManager ? timeManager.getTimeScale() : 1.0;
+		const dt = (scene.getEngine().getDeltaTime() / 1000) * ts;
+		
+		for (let i = activeEnemyBullets.length - 1; i >= 0; i--) {
+			const bullet = activeEnemyBullets[i];
+			
+			if (bullet.isDisposed()) {
+				activeEnemyBullets.splice(i, 1);
+				continue;
+			}
+			
+			// Update age
+			if (bullet.metadata && typeof bullet.metadata.age === 'number') {
+				bullet.metadata.age += dt;
+				
+				// Cleanup after 5 seconds game time
+				if (bullet.metadata.age >= 5.0) {
+					if (bullet.metadata.aggregate) {
+						bullet.metadata.aggregate.dispose();
+					}
+					bullet.dispose();
+					activeEnemyBullets.splice(i, 1);
+				}
+			}
+		}
+	});
 	
 	// --- Ghost Enemy Logic ---
 	if (spawns && spawns.length > 0) {
@@ -225,8 +254,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 			let lastTurnTime = 0;
 			
 			// --- Shooting Timer ---
-			// Random start delay between 0 and 5 seconds, then interval of 8-10s
-			let nextFireTime = Date.now() + (Math.random() * 5000) + 8000;
+			// Use a countdown timer (game time) instead of Date.now() (real time)
+			// Random start delay between 0 and 5 seconds + 8 seconds base
+			let fireTimer = (Math.random() * 5.0) + 8.0;
 			
 			collisionObservable.add((event) => {
 				// If already rotating or attacking, ignore collisions
@@ -270,11 +300,14 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 				// Get Time Scale
 				const ts = timeManager ? timeManager.getTimeScale() : 1.0;
 				const dt = (scene.getEngine().getDeltaTime() / 1000) * ts;
-				const now = Date.now();
+				
+				// Decrement fire timer with game time
+				if (!isAttacking && !isRotating) {
+					fireTimer -= dt;
+				}
 				
 				// --- Shooting Logic ---
-				// Note: We check real time for trigger, but execution speed depends on dt
-				if (!isAttacking && !isRotating && now > nextFireTime) {
+				if (!isAttacking && !isRotating && fireTimer <= 0) {
 					// Start Attack Sequence
 					isAttacking = true;
 					
@@ -334,7 +367,11 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 						bullet.material = bulletMat;
 						
 						// Store type in metadata for interaction
-						bullet.metadata = { type: bulletType };
+						// Also store age and aggregate for cleanup
+						bullet.metadata = {
+							type: bulletType,
+							age: 0
+						};
 						
 						// Initial Scaling
 						if (timeManager && timeManager.isSlowMotion()) {
@@ -352,6 +389,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 						
 						const bulletAgg = new BABYLON.PhysicsAggregate(bullet, BABYLON.PhysicsShapeType.SPHERE, { mass: 0.5, restitution: 0.8 }, scene);
 						bulletAgg.body.setGravityFactor(0);
+						
+						// Store aggregate for cleanup
+						bullet.metadata.aggregate = bulletAgg;
 						
 						// Speed: Half of player (Player=20, so 10)
 						// Scale impulse by timeScale
@@ -383,24 +423,9 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 							const idx = activeEnemyBullets.indexOf(bullet);
 							if (idx > -1) activeEnemyBullets.splice(idx, 1);
 							
-							bullet.dispose();
 							bulletAgg.dispose();
+							bullet.dispose();
 						});
-						
-						// Interaction: Click to see type in Slow Motion
-						// Note: This is now handled by the generic raycast in game-player-fire.js
-						// We keep the metadata on the bullet so the player script can find it.
-						
-						// Cleanup bullet after 5 seconds if no hit
-						setTimeout(() => {
-							if (!bullet.isDisposed()) {
-								const idx = activeEnemyBullets.indexOf(bullet);
-								if (idx > -1) activeEnemyBullets.splice(idx, 1);
-								
-								bullet.dispose();
-								bulletAgg.dispose();
-							}
-						}, 5000);
 						
 						// C. Wait a moment (scaled by time)
 						// We use a loop to wait "game time"
@@ -424,8 +449,8 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 						
 						// E. Resume
 						isAttacking = false;
-						// Set next fire time (8-10 seconds real time)
-						nextFireTime = Date.now() + (Math.random() * 2000) + 8000;
+						// Set next fire time (8-10 seconds game time)
+						fireTimer = (Math.random() * 2.0) + 8.0;
 					};
 					
 					performAttack();
@@ -464,7 +489,7 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 					
 					// Stuck Check
 					const horizontalSpeed = Math.sqrt(currentLinearVel.x ** 2 + currentLinearVel.z ** 2);
-					// Use real time for stuck check timeout
+					// Use real time for stuck check timeout (stuck is a physics state, not game logic)
 					if (horizontalSpeed < 0.5 && Date.now() - lastTurnTime > 1000) {
 						moveDir = moveDir.scale(-1);
 						targetRotY = ghostNode.rotation.y + Math.PI;
