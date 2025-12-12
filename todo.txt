@@ -3,13 +3,8 @@ this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilatio
 
 
 #SLOW MOTION GAMEPLAY TODO
-
-- refactor game-scene-alt to game-ghost-create, game-ghosts-movement, and game-ghost-bullet
-
-- create two list of 10 strings of random words that will be combined to name the ghosts.
-- add an option to the ui to show ghosts names above them on/off
-- when time to fire comes console log if a ghost (with name) can see the player, or not
-- console log if it fires along with its name and with bullet type and power it used, and how much power it has left.
+- BUG: turning names on makes all the buttons on the top unclickable
+- make the ghost names closer to the ghost.
 
 - player has two types of shields they can activate with buttons or keys 'V' and 'B', shield 'V' blocks fire bullets, shield 'B' blocks frost bullets, each shield lasts for 10 seconds.
 - using a shield will consume 3 health when cast.
@@ -27,6 +22,13 @@ this is a project using Babylon.js v8.40.1 - WebGL2 - Parallel shader compilatio
 
 
 #SLOW MOTION GAMEPLAY DONE
+- refactor game-scene-alt to game-ghost-create, game-ghosts-movement, and game-ghost-bullet
+
+- create two list of 10 strings of random words that will be combined to name the ghosts.
+- add an option to the ui to show ghosts names above them on/off
+- when time to fire comes console log if a ghost (with name) can see the player, or not
+- console log if it fires along with its name and with bullet type and power it used, and how much power it has left.
+
 - enemy bullets can be of two types fire and frost, at full power fire bullets do 10 damage to player health, frost bullets slow player movement speed by 50% for 5 seconds. but the ghosts can also fire at lower power levels that do less damage or slow effect. Ghosts should choose lower power levels for their bullets if they are far from the player and higher power levels when they are close to the player.
 - the more power a ghost loads to the bullet the longer it will live as well.
 - Each ghost also has 100 power and full power will use 10 power. Ghosts should conserve their power and not use full power bullets all the time even when close to the player.
