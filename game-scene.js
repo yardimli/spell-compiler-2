@@ -41,10 +41,7 @@ export const initGameScene = async (scene) => {
 	
 	// Calculate offsets to center the map at (0,0,0)
 	const xOffset = -groundWidth / 2 + (TILE_SIZE / 2);
-	const zOffset = -groundHeight / 2 + (TILE_SIZE / 2); // Map rows usually go Top->Bottom, which is +Z to -Z or -Z to +Z depending on preference.
-	// Here we map Row 0 to -Z (Top) or +Z. Let's map Row 0 to +Z (Top of map) to match array visual.
-	// Actually, usually in 2D arrays: Row 0 is "Top". In 3D, +Z is "Forward".
-	// So Row 0 = +Z_Max, Row Max = -Z_Max.
+	const zOffset = -groundHeight / 2 + (TILE_SIZE / 2);
 	const zStart = groundHeight / 2 - (TILE_SIZE / 2);
 	
 	// --- Materials ---
@@ -87,14 +84,13 @@ export const initGameScene = async (scene) => {
 	// --- Map Parsing & Object Creation ---
 	let playerStartPosition = new BABYLON.Vector3(0, 5, 0); // Default
 	const ballSpawns = []; // Stores { position, type }
+	const noobSpawns = []; // Stores { position } for Noob Characters
 	
 	for (let r = 0; r < rowCount; r++) {
 		for (let c = 0; c < colCount; c++) {
 			const cellValue = rows[r][c];
 			
 			// Calculate Position
-			// X = Column index * size + offset
-			// Z = Start Z - (Row index * size)
 			const posX = xOffset + (c * TILE_SIZE);
 			const posZ = zStart - (r * TILE_SIZE);
 			const position = new BABYLON.Vector3(posX, WALL_HEIGHT / 2, posZ);
@@ -126,6 +122,11 @@ export const initGameScene = async (scene) => {
 					position: new BABYLON.Vector3(posX, 10, posZ), // Drop from height
 					type: parseInt(cellValue)
 				});
+			} else if (cellValue === '6') {
+				// Noob Character Spawn
+				noobSpawns.push({
+					position: new BABYLON.Vector3(posX, 2, posZ) // Ground level
+				});
 			}
 		}
 	}
@@ -133,6 +134,7 @@ export const initGameScene = async (scene) => {
 	return {
 		shadowGenerator,
 		playerStartPosition,
-		ballSpawns
+		ballSpawns,
+		noobSpawns // Return the new spawn list
 	};
 };

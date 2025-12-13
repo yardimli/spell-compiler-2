@@ -294,9 +294,14 @@ export const initGameUI = (scene, cameraManager) => {
 		label.outlineWidth = 2;
 		label.outlineColor = 'black';
 		
+		// Fix: Disable hit testing so the label doesn't block clicks on UI buttons behind it
+		label.isHitTestVisible = false;
+		
 		advancedTexture.addControl(label);
 		label.linkWithMesh(mesh);
-		label.linkOffsetY = -100; // Position above the ghost
+		
+		// Fix: Adjusted offset to be closer to the ghost (was -100)
+		label.linkOffsetY = -40;
 		
 		// Set initial visibility based on toggle state
 		label.isVisible = showGhostNames;
@@ -319,7 +324,9 @@ export const initGameUI = (scene, cameraManager) => {
 	// --- Exposed Methods ---
 	return {
 		advancedTexture,
-		setSlowMotionCallback: (cb) => { onSlowMoToggle = cb; },
+		setSlowMotionCallback: (cb) => {
+			onSlowMoToggle = cb;
+		},
 		setSlowMotionActive: (isActive) => {
 			slowMoOverlay.isVisible = isActive;
 		},

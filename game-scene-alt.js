@@ -2,8 +2,10 @@ import * as BABYLON from '@babylonjs/core';
 import { createGhost } from './game-ghost-create';
 import { initGhostMovement } from './game-ghosts-movement';
 import { initBulletSystem } from './game-ghost-bullet';
+import { createNoobCharacter } from './game-noob-character';
 
-export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoot, playerMethods, timeManager, uiManager) => {
+// Updated signature to accept noobSpawns
+export const initGameSceneAlt = async (scene, shadowGenerator, ghostSpawns, noobSpawns, playerRoot, playerMethods, timeManager, uiManager) => {
 	const playerVisual = playerMethods.playerVisual;
 	
 	// --- 3D Text (Legacy) ---
@@ -66,13 +68,20 @@ export const initGameSceneAlt = async (scene, shadowGenerator, spawns, playerRoo
 	initBulletSystem(scene, timeManager);
 	
 	// --- Initialize Ghosts ---
-	if (spawns && spawns.length > 0) {
-		spawns.forEach((spawn, index) => {
+	if (ghostSpawns && ghostSpawns.length > 0) {
+		ghostSpawns.forEach((spawn, index) => {
 			// 1. Create Visuals & Physics
 			const ghostEntity = createGhost(scene, shadowGenerator, spawn, index, uiManager);
 			
 			// 2. Attach AI / Movement
 			initGhostMovement(scene, ghostEntity, playerRoot, playerVisual, playerMethods, timeManager);
+		});
+	}
+	
+	// --- Initialize Noob Characters ---
+	if (noobSpawns && noobSpawns.length > 0) {
+		noobSpawns.forEach((spawn) => {
+			createNoobCharacter(scene, spawn, shadowGenerator, timeManager);
 		});
 	}
 	

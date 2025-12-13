@@ -9,7 +9,7 @@ import { initGamePlayer } from './game-player';
 import { initGameCamera } from './game-camera';
 import { initGamePlayerFire } from './game-player-fire';
 import { initGameUI } from './game-ui';
-import { initGameTime } from './game-time'; // New Import
+import { initGameTime } from './game-time';
 
 const earcut = Earcut.default || Earcut;
 window.earcut = earcut;
@@ -31,7 +31,8 @@ const createScene = async function () {
 	}
 	
 	// 1. Scene (Load Map)
-	const { shadowGenerator, playerStartPosition, ballSpawns } = await initGameScene(scene);
+	// Updated to get noobSpawns
+	const { shadowGenerator, playerStartPosition, ballSpawns, noobSpawns } = await initGameScene(scene);
 	
 	// 2. Camera Manager Reference (Placeholder)
 	const cameraManagerRef = { getActiveCamera: () => scene.activeCamera };
@@ -39,24 +40,24 @@ const createScene = async function () {
 	// 3. UI System
 	const uiManager = initGameUI(scene, cameraManagerRef);
 	
-	// 4. Time Manager (New)
+	// 4. Time Manager
 	const timeManager = initGameTime(scene, uiManager);
 	
 	// 5. Player (Pass timeManager)
 	const playerManager = initGamePlayer(scene, shadowGenerator, cameraManagerRef, playerStartPosition, uiManager, timeManager);
 	const { playerRoot, playerVisual } = playerManager;
 	
-	// 6. Scene Alt (Ghosts/Enemies) - Pass timeManager and uiManager
-	await initGameSceneAlt(scene, shadowGenerator, ballSpawns, playerRoot, playerManager, timeManager, uiManager);
+	// 6. Scene Alt (Ghosts/Enemies/Noobs)
+	// Pass noobSpawns as an additional argument
+	await initGameSceneAlt(scene, shadowGenerator, ballSpawns, noobSpawns, playerRoot, playerManager, timeManager, uiManager);
 	
 	// 7. Real Camera
 	const realCameraManager = initGameCamera(scene, canvas, playerRoot);
-	// Update the reference so Player and UI use the real camera logic
 	cameraManagerRef.getActiveCamera = realCameraManager.getActiveCamera;
 	cameraManagerRef.setCameraMode = realCameraManager.setCameraMode;
 	cameraManagerRef.getCameraMode = realCameraManager.getCameraMode;
 	
-	// 8. Fire System (Player Shooting) - Pass timeManager AND uiManager
+	// 8. Fire System (Player Shooting)
 	initGamePlayerFire(scene, shadowGenerator, playerVisual, realCameraManager, timeManager, uiManager);
 	
 	// Connect UI Slow Mo Button to Time Manager
